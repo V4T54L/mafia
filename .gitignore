@@ -1,1 +1,12 @@
 ref/
+
+# Go binaries (root level only)
+/server
+/mafia
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
