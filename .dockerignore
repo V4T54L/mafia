@@ -1,0 +1,43 @@
+# Git
+.git
+.gitignore
+
+# IDE
+.idea
+.vscode
+*.swp
+*.swo
+
+# Documentation
+*.md
+ref/
+docs/
+
+# Development files
+.env
+.env.*
+!.env.example
+
+# Node
+web/node_modules
+web/.vite
+web/dist
+
+# Go
+*.exe
+*.test
+*.out
+coverage.out
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker
+Dockerfile*
+docker-compose*
+.dockerignore
+
+# CI/CD
+.github
+.gitlab-ci.yml

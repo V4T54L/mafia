@@ -37,7 +37,7 @@ func (s *Server) setupMiddleware() {
 	s.router.Use(middleware.Logger)
 	s.router.Use(middleware.Recoverer)
 	s.router.Use(cors.Handler(cors.Options{
-		AllowedOrigins:   []string{"http://localhost:*", "http://127.0.0.1:*"},
+		AllowedOrigins:   []string{"http://localhost:*", "http://127.0.0.1:*", "https://*.onrender.com"},
 		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
 		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type"},
 		AllowCredentials: true,
@@ -46,9 +46,12 @@ func (s *Server) setupMiddleware() {
 }
 
 func (s *Server) setupRoutes() {
+	// Health check at root level (for container health checks)
+	s.router.Get("/health", s.handleHealth)
+
 	// API routes
 	s.router.Route("/api", func(r chi.Router) {
-		r.Get("/health", s.handleHealth)
+		r.Get("/health", s.handleHealth) // Also available at /api/health
 	})
 
 	// WebSocket endpoint

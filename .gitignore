@@ -1,5 +1,10 @@
 ref/
 
+# Environment files
+.env
+.env.local
+.env.*.local
+
 # Go binaries (root level only)
 /server
 /mafia
