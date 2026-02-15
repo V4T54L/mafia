@@ -282,11 +282,16 @@ func (g *Game) ResolveNight() *NightResult {
 	g.Phase = PhaseNightResult
 	result := &NightResult{}
 
+	// Night 1 has no kills - Mafia only identifies each other
+	// Check if this is Night 1 by seeing if no day phase has occurred yet
+	isFirstNight := g.LastDayResult == nil
+
 	// Check if mafia target was saved
 	mafiaTarget := g.NightActions.MafiaTarget
 	doctorTarget := g.NightActions.DoctorTarget
 
-	if mafiaTarget != "" {
+	// Only process kill if not first night
+	if mafiaTarget != "" && !isFirstNight {
 		if mafiaTarget == doctorTarget {
 			result.WasSaved = true
 		} else {
