@@ -14,7 +14,17 @@ export function HeroSection() {
 
       {/* Content */}
       <div className="relative z-10 flex flex-col items-center">
-        {/* Logo */}
+        {/* Logo Image */}
+        <motion.img
+          src="/logo.png"
+          alt="Mafia Game"
+          className="w-24 h-24 md:w-32 md:h-32 mb-4 rounded-2xl"
+          initial={{ opacity: 0, scale: 0.8, rotate: -10 }}
+          animate={{ opacity: 1, scale: 1, rotate: 0 }}
+          transition={{ duration: 0.6, ease: 'easeOut' }}
+        />
+
+        {/* Title */}
         <motion.div
           className="mb-4"
           initial={{ opacity: 0, scale: 0.9 }}

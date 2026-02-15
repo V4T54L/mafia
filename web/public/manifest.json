@@ -1,0 +1,17 @@
+{
+  "name": "Mafia - Voice-Based Social Deduction",
+  "short_name": "Mafia",
+  "description": "Play Mafia online with friends. No accounts, no downloads. Voice chat included.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0f0a1f",
+  "theme_color": "#0f0a1f",
+  "icons": [
+    {
+      "src": "/logo.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
