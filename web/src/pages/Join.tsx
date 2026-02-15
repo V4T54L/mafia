@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { Button } from '../components/ui'
-import { useWebSocket } from '../hooks/useWebSocket'
+import { useWebSocket } from '../contexts/WebSocketContext'
 import { useGameStore } from '../stores/gameStore'
 
 export function Join() {
@@ -16,14 +16,13 @@ export function Join() {
   const [error, setError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
 
-  const { connect, send, once, isConnected, connectionState } = useWebSocket()
+  const { send, once, isConnected, connectionState } = useWebSocket()
   const { roomCode: storeRoomCode, reset } = useGameStore()
 
-  // Connect to WebSocket on mount
+  // Clear any previous state on mount
   useEffect(() => {
-    reset() // Clear any previous state
-    connect()
-  }, [connect, reset])
+    reset()
+  }, [reset])
 
   // Navigate to lobby when room is joined/created
   useEffect(() => {

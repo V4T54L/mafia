@@ -206,3 +206,16 @@ func (h *Hub) RoomSize(roomCode string) int {
 	}
 	return 0
 }
+
+// GetClient returns a client by player ID
+func (h *Hub) GetClient(playerID string) *Client {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+
+	for client := range h.clients {
+		if client.PlayerID == playerID {
+			return client
+		}
+	}
+	return nil
+}

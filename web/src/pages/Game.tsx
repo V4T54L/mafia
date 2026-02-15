@@ -2,7 +2,9 @@ import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Button } from '../components/ui'
-import type { GamePhase, Role, Player, Team } from '../stores/gameStore'
+import { useGameStore } from '../stores/gameStore'
+import { useWebSocket } from '../contexts/WebSocketContext'
+import type { Role, Player, Team } from '../stores/gameStore'
 
 // Role display info
 const roleInfo: Record<Role, { icon: string; name: string; team: Team; description: string }> = {
@@ -22,7 +24,7 @@ const roleInfo: Record<Role, { icon: string; name: string; team: Team; descripti
     icon: '🎩',
     name: 'Godfather',
     team: 'mafia',
-    description: 'Lead the Mafia. You appear innocent to the Detective... the first time.',
+    description: 'Lead the Mafia. You appear innocent to the Detective.',
   },
   doctor: {
     icon: '💊',
@@ -38,24 +40,15 @@ const roleInfo: Record<Role, { icon: string; name: string; team: Team; descripti
   },
 }
 
-// Mock game state
-const mockPlayers: Player[] = [
-  { id: '1', nickname: 'Alice', isHost: true, isReady: true, status: 'alive', role: 'detective' },
-  { id: '2', nickname: 'Bob', isHost: false, isReady: true, status: 'alive', role: 'mafia' },
-  { id: '3', nickname: 'Charlie', isHost: false, isReady: true, status: 'dead', role: 'villager' },
-  { id: '4', nickname: 'Diana', isHost: false, isReady: true, status: 'alive', role: 'doctor' },
-  { id: '5', nickname: 'Eve', isHost: false, isReady: true, status: 'alive', role: 'mafia' },
-  { id: '6', nickname: 'Frank', isHost: false, isReady: true, status: 'alive', role: 'villager' },
-]
-
 // Component: Role Reveal
-function RoleReveal({ role, onContinue }: { role: Role; onContinue: () => void }) {
+function RoleReveal({
+  role,
+  teammates,
+}: {
+  role: Role
+  teammates: Array<{ id: string; nickname: string; role: Role }>
+}) {
   const info = roleInfo[role]
-
-  useEffect(() => {
-    const timer = setTimeout(onContinue, 5000)
-    return () => clearTimeout(timer)
-  }, [onContinue])
 
   return (
     <motion.div
@@ -71,9 +64,7 @@ function RoleReveal({ role, onContinue }: { role: Role; onContinue: () => void }
         transition={{ delay: 0.3, duration: 0.5 }}
       >
         <p className="text-text-secondary mb-4">You are the</p>
-        <div
-          className={`text-8xl mb-4 ${info.team === 'mafia' ? 'animate-pulse' : ''}`}
-        >
+        <div className={`text-8xl mb-4 ${info.team === 'mafia' ? 'animate-pulse' : ''}`}>
           {info.icon}
         </div>
         <h1
@@ -90,7 +81,19 @@ function RoleReveal({ role, onContinue }: { role: Role; onContinue: () => void }
         >
           {info.team === 'mafia' ? 'Mafia' : 'Town'}
         </p>
-        <p className="text-text-secondary max-w-xs mx-auto">{info.description}</p>
+        <p className="text-text-secondary max-w-xs mx-auto mb-6">{info.description}</p>
+
+        {/* Show teammates for mafia */}
+        {teammates.length > 0 && (
+          <div className="mt-4 p-4 bg-accent-mafia/10 rounded-xl">
+            <p className="text-sm text-accent-mafia mb-2">Your partners:</p>
+            {teammates.map((t) => (
+              <p key={t.id} className="text-accent-mafia">
+                {roleInfo[t.role].icon} {t.nickname}
+              </p>
+            ))}
+          </div>
+        )}
       </motion.div>
 
       <motion.p
@@ -140,12 +143,7 @@ function PlayerCard({
       whileTap={isSelectable && !isDead ? { scale: 0.98 } : {}}
     >
       {/* Avatar */}
-      <div
-        className={`
-          w-12 h-12 rounded-full flex items-center justify-center text-xl
-          ${isDead ? 'bg-bg-elevated' : 'bg-bg-elevated'}
-        `}
-      >
+      <div className="w-12 h-12 rounded-full flex items-center justify-center text-xl bg-bg-elevated">
         {isDead ? '💀' : player.nickname.charAt(0).toUpperCase()}
       </div>
 
@@ -189,13 +187,15 @@ function PlayerCard({
 // Component: Night Phase
 function NightPhase({
   myRole,
+  myId,
   players,
   timer,
   onAction,
 }: {
   myRole: Role
+  myId: string
   players: Player[]
-  timer: number
+  timer: number | null
   onAction: (targetId: string) => void
 }) {
   const [selectedTarget, setSelectedTarget] = useState<string | null>(null)
@@ -203,6 +203,7 @@ function NightPhase({
 
   const alivePlayers = players.filter((p) => p.status === 'alive')
   const canAct = ['mafia', 'godfather', 'doctor', 'detective'].includes(myRole)
+  const isMafia = myRole === 'mafia' || myRole === 'godfather'
 
   const getActionText = () => {
     switch (myRole) {
@@ -216,6 +217,16 @@ function NightPhase({
       default:
         return 'Wait for night to end...'
     }
+  }
+
+  const canTarget = (playerId: string) => {
+    if (playerId === myId && myRole !== 'doctor') return false // Doctor can self-protect
+    if (isMafia) {
+      // Mafia can't target other mafia
+      const target = players.find((p) => p.id === playerId)
+      if (target?.role === 'mafia' || target?.role === 'godfather') return false
+    }
+    return true
   }
 
   const handleSubmit = () => {
@@ -236,9 +247,11 @@ function NightPhase({
         </div>
 
         {/* Timer */}
-        <div className="text-center mb-6">
-          <span className="text-4xl font-mono text-accent-neutral">{timer}s</span>
-        </div>
+        {timer !== null && (
+          <div className="text-center mb-6">
+            <span className="text-4xl font-mono text-accent-neutral">{timer}s</span>
+          </div>
+        )}
 
         {/* Player selection */}
         {canAct && !hasSubmitted && (
@@ -247,8 +260,8 @@ function NightPhase({
               <PlayerCard
                 key={player.id}
                 player={player}
-                isMe={player.id === '1'}
-                isSelectable={player.id !== '1'} // Can't target self (except doctor maybe)
+                isMe={player.id === myId}
+                isSelectable={canTarget(player.id)}
                 isSelected={selectedTarget === player.id}
                 onSelect={() => setSelectedTarget(player.id)}
               />
@@ -294,24 +307,71 @@ function NightPhase({
   )
 }
 
+// Component: Night Result
+function NightResultPhase({
+  killedNickname,
+  wasSaved,
+  investigation,
+}: {
+  killedNickname: string | null
+  wasSaved: boolean
+  investigation?: { targetNickname: string; isMafia: boolean }
+}) {
+  return (
+    <div className="flex-1 p-4 flex flex-col items-center justify-center">
+      <div className="max-w-md mx-auto text-center">
+        <div className="text-4xl mb-4">☀️</div>
+        <h1 className="font-display text-3xl text-text-primary tracking-wide mb-6">DAWN BREAKS</h1>
+
+        {wasSaved ? (
+          <div className="bg-accent-success/10 border border-accent-success/20 rounded-xl p-4 mb-4">
+            <p className="text-accent-success">No one was killed last night.</p>
+            <p className="text-text-secondary text-sm mt-1">The Doctor saved someone...</p>
+          </div>
+        ) : killedNickname ? (
+          <div className="bg-accent-mafia/10 border border-accent-mafia/20 rounded-xl p-4 mb-4">
+            <p className="text-accent-mafia">
+              <span className="font-semibold">{killedNickname}</span> was eliminated.
+            </p>
+          </div>
+        ) : (
+          <div className="bg-bg-surface rounded-xl p-4 mb-4">
+            <p className="text-text-secondary">The Mafia did not kill anyone.</p>
+          </div>
+        )}
+
+        {investigation && (
+          <div className="bg-accent-neutral/10 border border-accent-neutral/20 rounded-xl p-4 mt-4">
+            <p className="text-accent-neutral text-sm">Investigation Result:</p>
+            <p className={investigation.isMafia ? 'text-accent-mafia' : 'text-accent-town'}>
+              {investigation.targetNickname} is {investigation.isMafia ? 'MAFIA' : 'NOT MAFIA'}
+            </p>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
 // Component: Day Phase
 function DayPhase({
+  myId,
   players,
+  timer,
+  voteCounts,
   onVote,
 }: {
+  myId: string
   players: Player[]
+  timer: number | null
+  voteCounts: Record<string, number>
   onVote: (targetId: string | null) => void
 }) {
   const [selectedVote, setSelectedVote] = useState<string | null>(null)
   const [hasVoted, setHasVoted] = useState(false)
 
-  // Mock vote counts
-  const voteCounts: Record<string, number> = {
-    '2': 2,
-    '5': 1,
-  }
-
   const alivePlayers = players.filter((p) => p.status === 'alive')
+  const amIDead = players.find((p) => p.id === myId)?.status === 'dead'
 
   const handleSubmitVote = () => {
     onVote(selectedVote)
@@ -328,12 +388,19 @@ function DayPhase({
           <p className="text-text-secondary mt-1">Discuss and vote to eliminate</p>
         </div>
 
-        {/* Info banner */}
-        <div className="bg-accent-mafia/10 border border-accent-mafia/20 rounded-xl p-3 mb-6 text-center">
-          <p className="text-sm text-accent-mafia">
-            <span className="font-semibold">Charlie</span> was eliminated last night
-          </p>
-        </div>
+        {/* Timer */}
+        {timer !== null && (
+          <div className="text-center mb-6">
+            <span className="text-4xl font-mono text-accent-neutral">{timer}s</span>
+          </div>
+        )}
+
+        {/* Dead player notice */}
+        {amIDead && (
+          <div className="bg-bg-surface rounded-xl p-4 mb-6 text-center">
+            <p className="text-text-disabled">You are dead. You cannot vote.</p>
+          </div>
+        )}
 
         {/* Player list with voting */}
         <div className="space-y-2">
@@ -341,8 +408,8 @@ function DayPhase({
             <PlayerCard
               key={player.id}
               player={player}
-              isMe={player.id === '1'}
-              isSelectable={!hasVoted && player.id !== '1'}
+              isMe={player.id === myId}
+              isSelectable={!hasVoted && !amIDead && player.id !== myId}
               isSelected={selectedVote === player.id}
               onSelect={() => setSelectedVote(player.id)}
               votedBy={voteCounts[player.id]}
@@ -351,7 +418,7 @@ function DayPhase({
         </div>
 
         {/* Skip vote option */}
-        {!hasVoted && (
+        {!hasVoted && !amIDead && (
           <button
             onClick={() => setSelectedVote(null)}
             className={`
@@ -373,7 +440,7 @@ function DayPhase({
       </div>
 
       {/* Submit button */}
-      {!hasVoted && (
+      {!hasVoted && !amIDead && (
         <div className="fixed bottom-0 left-0 right-0 p-4 bg-bg-primary border-t border-bg-surface">
           <div className="max-w-md mx-auto">
             <Button variant="danger" size="lg" fullWidth glow onClick={handleSubmitVote}>
@@ -386,16 +453,54 @@ function DayPhase({
   )
 }
 
+// Component: Day Result
+function DayResultPhase({
+  eliminatedNickname,
+  eliminatedRole,
+  noMajority,
+}: {
+  eliminatedNickname: string | null
+  eliminatedRole: Role | null
+  noMajority: boolean
+}) {
+  return (
+    <div className="flex-1 p-4 flex flex-col items-center justify-center">
+      <div className="max-w-md mx-auto text-center">
+        <div className="text-4xl mb-4">⚖️</div>
+        <h1 className="font-display text-3xl text-text-primary tracking-wide mb-6">VERDICT</h1>
+
+        {noMajority ? (
+          <div className="bg-bg-surface rounded-xl p-4">
+            <p className="text-text-secondary">No majority reached.</p>
+            <p className="text-text-disabled text-sm mt-1">No one was eliminated.</p>
+          </div>
+        ) : eliminatedNickname ? (
+          <div className="bg-accent-mafia/10 border border-accent-mafia/20 rounded-xl p-4">
+            <p className="text-accent-mafia mb-2">
+              <span className="font-semibold">{eliminatedNickname}</span> was eliminated.
+            </p>
+            {eliminatedRole && (
+              <p className={eliminatedRole === 'mafia' || eliminatedRole === 'godfather' ? 'text-accent-mafia' : 'text-accent-town'}>
+                They were the {roleInfo[eliminatedRole].icon} {roleInfo[eliminatedRole].name}
+              </p>
+            )}
+          </div>
+        ) : null}
+      </div>
+    </div>
+  )
+}
+
 // Component: Game Over
 function GameOver({
   winner,
   players,
-  onPlayAgain,
+  myId,
   onLeave,
 }: {
   winner: Team
   players: Player[]
-  onPlayAgain: () => void
+  myId: string
   onLeave: () => void
 }) {
   return (
@@ -430,7 +535,7 @@ function GameOver({
               <PlayerCard
                 key={player.id}
                 player={player}
-                isMe={player.id === '1'}
+                isMe={player.id === myId}
                 isSelectable={false}
                 isSelected={false}
                 showRole
@@ -442,12 +547,9 @@ function GameOver({
 
       {/* Action buttons */}
       <div className="fixed bottom-0 left-0 right-0 p-4 bg-bg-primary border-t border-bg-surface">
-        <div className="max-w-md mx-auto flex gap-3">
-          <Button variant="secondary" size="lg" fullWidth onClick={onLeave}>
-            Leave
-          </Button>
-          <Button variant="primary" size="lg" fullWidth onClick={onPlayAgain}>
-            Play Again
+        <div className="max-w-md mx-auto">
+          <Button variant="primary" size="lg" fullWidth onClick={onLeave}>
+            Leave Game
           </Button>
         </div>
       </div>
@@ -459,54 +561,57 @@ function GameOver({
 export function Game() {
   const { code } = useParams()
   const navigate = useNavigate()
+  const { send, isConnected } = useWebSocket()
 
-  // Mock state - will be replaced with Zustand/WebSocket
-  const [phase, setPhase] = useState<GamePhase>('role_reveal')
-  const [myRole] = useState<Role>('detective')
-  const [players] = useState<Player[]>(mockPlayers)
-  const [timer, setTimer] = useState(60)
-  const [winner, setWinner] = useState<Team | null>(null)
+  const {
+    phase,
+    playerId,
+    myRole,
+    teammates,
+    players,
+    phaseTimer,
+    voteCounts,
+    nightResult,
+    dayResult,
+    winner,
+    roomCode,
+    reset,
+  } = useGameStore()
 
-  // Mock: cycle through phases for demo
+  // Redirect to lobby if not in a game
   useEffect(() => {
-    if (phase === 'role_reveal') {
-      const timeout = setTimeout(() => setPhase('night'), 5000)
-      return () => clearTimeout(timeout)
+    if (isConnected && !roomCode) {
+      navigate(`/join/${code}`)
     }
-  }, [phase])
+  }, [isConnected, roomCode, code, navigate])
 
-  // Mock timer countdown
+  // Redirect to lobby if still in lobby phase
   useEffect(() => {
-    if (phase === 'night' && timer > 0) {
-      const interval = setInterval(() => setTimer((t) => t - 1), 1000)
-      return () => clearInterval(interval)
+    if (phase === 'lobby') {
+      navigate(`/lobby/${code}`)
     }
-  }, [phase, timer])
+  }, [phase, code, navigate])
 
   const handleNightAction = (targetId: string) => {
-    console.log('Night action on:', targetId)
-    // After some delay, move to day
-    setTimeout(() => {
-      setPhase('day')
-      setTimer(0) // No timer for day in MVP
-    }, 2000)
+    send('night_action', { target_id: targetId })
   }
 
   const handleDayVote = (targetId: string | null) => {
-    console.log('Day vote:', targetId)
-    // After some delay, show game over (mock)
-    setTimeout(() => {
-      setWinner('town')
-      setPhase('game_over')
-    }, 2000)
-  }
-
-  const handlePlayAgain = () => {
-    navigate(`/lobby/${code}`)
+    send('day_vote', { target_id: targetId || '' })
   }
 
   const handleLeave = () => {
+    send('leave_room', {})
+    reset()
     navigate('/')
+  }
+
+  if (!myRole || !playerId) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-bg-primary">
+        <p className="text-text-secondary">Loading game...</p>
+      </div>
+    )
   }
 
   return (
@@ -514,7 +619,7 @@ export function Game() {
       {/* Role reveal overlay */}
       <AnimatePresence>
         {phase === 'role_reveal' && (
-          <RoleReveal role={myRole} onContinue={() => setPhase('night')} />
+          <RoleReveal role={myRole} teammates={teammates} />
         )}
       </AnimatePresence>
 
@@ -522,7 +627,7 @@ export function Game() {
       {phase !== 'role_reveal' && (
         <header className="p-4 flex items-center justify-between border-b border-bg-surface">
           <div className="text-text-secondary text-sm">
-            Room: <span className="font-mono">{code}</span>
+            Room: <span className="font-mono">{roomCode || code}</span>
           </div>
           <div className="text-text-secondary text-sm">
             {roleInfo[myRole].icon} {roleInfo[myRole].name}
@@ -532,16 +637,46 @@ export function Game() {
 
       {/* Phase content */}
       {phase === 'night' && (
-        <NightPhase myRole={myRole} players={players} timer={timer} onAction={handleNightAction} />
+        <NightPhase
+          myRole={myRole}
+          myId={playerId}
+          players={players}
+          timer={phaseTimer}
+          onAction={handleNightAction}
+        />
       )}
 
-      {phase === 'day' && <DayPhase players={players} onVote={handleDayVote} />}
+      {phase === 'night_result' && nightResult && (
+        <NightResultPhase
+          killedNickname={nightResult.killedNickname}
+          wasSaved={nightResult.wasSaved}
+          investigation={nightResult.investigation}
+        />
+      )}
+
+      {phase === 'day' && (
+        <DayPhase
+          myId={playerId}
+          players={players}
+          timer={phaseTimer}
+          voteCounts={voteCounts}
+          onVote={handleDayVote}
+        />
+      )}
+
+      {phase === 'day_result' && dayResult && (
+        <DayResultPhase
+          eliminatedNickname={dayResult.eliminatedNickname}
+          eliminatedRole={dayResult.eliminatedRole}
+          noMajority={dayResult.noMajority}
+        />
+      )}
 
       {phase === 'game_over' && winner && (
         <GameOver
           winner={winner}
           players={players}
-          onPlayAgain={handlePlayAgain}
+          myId={playerId}
           onLeave={handleLeave}
         />
       )}

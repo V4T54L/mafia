@@ -30,13 +30,14 @@ func main() {
 
 	// Create services
 	roomService := service.NewRoomService(log)
+	gameService := service.NewGameService(roomService, log)
 
 	// Create WebSocket hub
 	hub := ws.NewHub(log)
 	go hub.Run()
 
 	// Create message router
-	router := ws.NewRouter(hub, roomService, log)
+	router := ws.NewRouter(hub, roomService, gameService, log)
 
 	// Create WebSocket handler
 	wsHandler := ws.NewHandler(hub, log, router.HandleMessage, router.HandleDisconnect)

@@ -3,7 +3,12 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { Button } from '../components/ui'
 import { useGameStore, type Player, type GameSettings } from '../stores/gameStore'
-import { useWebSocket } from '../hooks/useWebSocket'
+import { useWebSocket } from '../contexts/WebSocketContext'
+
+// Calculate total players needed from settings
+function getTotalPlayers(settings: GameSettings): number {
+  return settings.villagers + settings.mafia + settings.godfather + settings.doctor + settings.detective
+}
 
 function PlayerCard({ player, isMe }: { player: Player; isMe: boolean }) {
   return (
@@ -140,24 +145,18 @@ export function Lobby() {
   const { code } = useParams()
   const navigate = useNavigate()
 
-  const { connect, send, isConnected, connectionState } = useWebSocket()
+  const { send, isConnected, connectionState } = useWebSocket()
   const {
     players,
     settings,
     playerId,
     isHost,
     roomCode,
+    phase,
     reset,
   } = useGameStore()
 
   const [copied, setCopied] = useState(false)
-
-  // Connect to WebSocket on mount if not already connected
-  useEffect(() => {
-    if (!isConnected) {
-      connect()
-    }
-  }, [connect, isConnected])
 
   // Redirect to join page if no room code (not in a room)
   useEffect(() => {
@@ -165,6 +164,13 @@ export function Lobby() {
       navigate(`/join/${code}`)
     }
   }, [isConnected, roomCode, code, navigate])
+
+  // Navigate to game when game starts
+  useEffect(() => {
+    if (phase === 'role_reveal') {
+      navigate(`/game/${roomCode || code}`)
+    }
+  }, [phase, roomCode, code, navigate])
 
   const me = players.find((p) => p.id === playerId)
   const isReady = me?.isReady || false
@@ -288,9 +294,13 @@ export function Lobby() {
               fullWidth
               glow
               onClick={handleStartGame}
-              disabled={!allReady || players.length < 6}
+              disabled={!allReady || players.length < getTotalPlayers(settings)}
             >
-              {allReady ? 'Start Game' : `Waiting (${readyCount}/${players.length})`}
+              {players.length < getTotalPlayers(settings)
+                ? `Need ${getTotalPlayers(settings)} players (${players.length} joined)`
+                : !allReady
+                ? `Waiting (${readyCount}/${players.length})`
+                : 'Start Game'}
             </Button>
           ) : (
             <Button

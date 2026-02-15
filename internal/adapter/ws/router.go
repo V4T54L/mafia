@@ -12,16 +12,23 @@ import (
 type Router struct {
 	hub         *Hub
 	roomService *service.RoomService
+	gameService *service.GameService
 	logger      *slog.Logger
 }
 
 // NewRouter creates a new message router
-func NewRouter(hub *Hub, roomService *service.RoomService, logger *slog.Logger) *Router {
-	return &Router{
+func NewRouter(hub *Hub, roomService *service.RoomService, gameService *service.GameService, logger *slog.Logger) *Router {
+	r := &Router{
 		hub:         hub,
 		roomService: roomService,
+		gameService: gameService,
 		logger:      logger,
 	}
+
+	// Set up game event handler
+	gameService.SetEventHandler(r.handleGameEvent)
+
+	return r
 }
 
 // HandleMessage routes an incoming message to the appropriate handler
@@ -37,6 +44,12 @@ func (r *Router) HandleMessage(client *Client, msg *Message) {
 		r.handleReady(client, msg)
 	case MsgTypeUpdateSettings:
 		r.handleUpdateSettings(client, msg)
+	case MsgTypeStartGame:
+		r.handleStartGame(client)
+	case MsgTypeNightAction:
+		r.handleNightAction(client, msg)
+	case MsgTypeDayVote:
+		r.handleDayVote(client, msg)
 	default:
 		client.SendError("unknown_message", "Unknown message type: "+msg.Type)
 	}
@@ -296,5 +309,135 @@ func toSettingsPayload(s entity.GameSettings) SettingsPayload {
 		Doctor:     s.Doctor,
 		Detective:  s.Detective,
 		NightTimer: s.NightTimer,
+	}
+}
+
+// Game handlers
+
+func (r *Router) handleStartGame(client *Client) {
+	if client.RoomCode == "" {
+		client.SendError("not_in_room", "Not in a room")
+		return
+	}
+
+	err := r.gameService.StartGame(client.RoomCode, client.PlayerID)
+	if err != nil {
+		switch err {
+		case entity.ErrNotHost:
+			client.SendError("not_host", "Only host can start the game")
+		case entity.ErrNotEnoughPlayers:
+			client.SendError("not_enough_players", "Not enough players")
+		case entity.ErrNotAllReady:
+			client.SendError("not_all_ready", "Not all players are ready")
+		default:
+			client.SendError("start_failed", "Failed to start game: "+err.Error())
+		}
+		return
+	}
+
+	r.logger.Info("game started", "room", client.RoomCode, "host", client.PlayerID)
+}
+
+func (r *Router) handleNightAction(client *Client, msg *Message) {
+	if client.RoomCode == "" {
+		client.SendError("not_in_room", "Not in a room")
+		return
+	}
+
+	var payload NightActionPayload
+	if err := json.Unmarshal(msg.Payload, &payload); err != nil {
+		client.SendError("invalid_payload", "Invalid night action payload")
+		return
+	}
+
+	err := r.gameService.SubmitNightAction(client.RoomCode, client.PlayerID, payload.TargetID)
+	if err != nil {
+		switch err {
+		case entity.ErrInvalidPhase:
+			client.SendError("invalid_phase", "Cannot perform night action now")
+		case entity.ErrPlayerDead:
+			client.SendError("player_dead", "Dead players cannot act")
+		case entity.ErrInvalidTarget:
+			client.SendError("invalid_target", "Invalid target")
+		case entity.ErrMafiaTargetMafia:
+			client.SendError("invalid_target", "Cannot target fellow mafia")
+		case entity.ErrCannotTargetSelf:
+			client.SendError("invalid_target", "Cannot target yourself")
+		default:
+			client.SendError("action_failed", "Failed to submit action")
+		}
+		return
+	}
+}
+
+func (r *Router) handleDayVote(client *Client, msg *Message) {
+	if client.RoomCode == "" {
+		client.SendError("not_in_room", "Not in a room")
+		return
+	}
+
+	var payload DayVotePayload
+	if err := json.Unmarshal(msg.Payload, &payload); err != nil {
+		client.SendError("invalid_payload", "Invalid vote payload")
+		return
+	}
+
+	err := r.gameService.SubmitDayVote(client.RoomCode, client.PlayerID, payload.TargetID)
+	if err != nil {
+		switch err {
+		case entity.ErrInvalidPhase:
+			client.SendError("invalid_phase", "Cannot vote now")
+		case entity.ErrPlayerDead:
+			client.SendError("player_dead", "Dead players cannot vote")
+		case entity.ErrInvalidTarget:
+			client.SendError("invalid_target", "Invalid target")
+		case entity.ErrCannotTargetSelf:
+			client.SendError("invalid_target", "Cannot vote for yourself")
+		default:
+			client.SendError("vote_failed", "Failed to submit vote")
+		}
+		return
+	}
+}
+
+// handleGameEvent processes events from the game service
+func (r *Router) handleGameEvent(event service.GameEvent) {
+	switch event.Type {
+	case service.EventGameStarted:
+		r.hub.BroadcastToRoom(event.RoomCode, MustMessage(EventTypeGameStarting, nil), nil)
+
+	case service.EventRoleAssigned:
+		// Send to specific player
+		client := r.hub.GetClient(event.TargetPlayerID)
+		if client != nil {
+			client.Send(MustMessage(EventTypeRoleAssigned, event.Data))
+		}
+
+	case service.EventPhaseChanged:
+		r.hub.BroadcastToRoom(event.RoomCode, MustMessage(EventTypePhaseChanged, event.Data), nil)
+
+	case service.EventTimerTick:
+		r.hub.BroadcastToRoom(event.RoomCode, MustMessage(EventTypeTimerTick, event.Data), nil)
+
+	case service.EventNightResult:
+		if event.TargetPlayerID != "" {
+			// Send to specific player (detective investigation)
+			client := r.hub.GetClient(event.TargetPlayerID)
+			if client != nil {
+				client.Send(MustMessage(EventTypeNightResult, event.Data))
+			}
+		} else {
+			// Broadcast to all
+			r.hub.BroadcastToRoom(event.RoomCode, MustMessage(EventTypeNightResult, event.Data), nil)
+		}
+
+	case service.EventVoteUpdate:
+		r.hub.BroadcastToRoom(event.RoomCode, MustMessage("vote_update", event.Data), nil)
+
+	case service.EventDayResult:
+		r.hub.BroadcastToRoom(event.RoomCode, MustMessage(EventTypeDayResult, event.Data), nil)
+
+	case service.EventGameOver:
+		r.hub.BroadcastToRoom(event.RoomCode, MustMessage(EventTypeGameOver, event.Data), nil)
 	}
 }

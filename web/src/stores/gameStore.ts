@@ -25,6 +25,31 @@ export interface GameSettings {
   nightTimer: number
 }
 
+export interface Teammate {
+  id: string
+  nickname: string
+  role: Role
+}
+
+export interface NightResult {
+  killedId: string | null
+  killedNickname: string | null
+  wasSaved: boolean
+  investigation?: {
+    targetId: string
+    targetNickname: string
+    isMafia: boolean
+  }
+}
+
+export interface DayResult {
+  eliminatedId: string | null
+  eliminatedNickname: string | null
+  eliminatedRole: Role | null
+  voteCounts: Record<string, number>
+  noMajority: boolean
+}
+
 export interface GameState {
   // Connection
   roomCode: string | null
@@ -38,10 +63,16 @@ export interface GameState {
 
   // Game state
   phase: GamePhase
+  round: number
   myRole: Role | null
+  myTeam: Team | null
+  teammates: Teammate[]
   phaseTimer: number | null
   nightTarget: string | null
   dayVote: string | null
+  voteCounts: Record<string, number>
+  nightResult: NightResult | null
+  dayResult: DayResult | null
   winner: Team | null
 
   // Actions
@@ -54,11 +85,17 @@ export interface GameState {
   addPlayer: (player: Player) => void
   removePlayer: (playerId: string, newHostId?: string) => void
   updatePlayerReady: (playerId: string, ready: boolean) => void
+  updatePlayerStatus: (playerId: string, status: PlayerStatus) => void
+  updatePlayerRole: (playerId: string, role: Role) => void
   setPhase: (phase: GamePhase) => void
-  setMyRole: (role: Role) => void
+  setRound: (round: number) => void
+  setMyRole: (role: Role, team: Team, teammates?: Teammate[]) => void
   setPhaseTimer: (timer: number | null) => void
   setNightTarget: (targetId: string | null) => void
   setDayVote: (targetId: string | null) => void
+  setVoteCounts: (counts: Record<string, number>) => void
+  setNightResult: (result: NightResult | null) => void
+  setDayResult: (result: DayResult | null) => void
   setWinner: (winner: Team | null) => void
   toggleReady: () => void
   reset: () => void
@@ -92,10 +129,16 @@ export const useGameStore = create<GameState>((set, get) => ({
   settings: defaultSettings,
   isHost: false,
   phase: 'lobby',
+  round: 0,
   myRole: null,
+  myTeam: null,
+  teammates: [],
   phaseTimer: null,
   nightTarget: null,
   dayVote: null,
+  voteCounts: {},
+  nightResult: null,
+  dayResult: null,
   winner: null,
 
   // Actions
@@ -118,11 +161,23 @@ export const useGameStore = create<GameState>((set, get) => ({
     set((state) => ({
       players: state.players.map((p) => (p.id === playerId ? { ...p, isReady: ready } : p)),
     })),
-  setPhase: (phase) => set({ phase }),
-  setMyRole: (role) => set({ myRole: role }),
+  updatePlayerStatus: (playerId, status) =>
+    set((state) => ({
+      players: state.players.map((p) => (p.id === playerId ? { ...p, status } : p)),
+    })),
+  updatePlayerRole: (playerId, role) =>
+    set((state) => ({
+      players: state.players.map((p) => (p.id === playerId ? { ...p, role } : p)),
+    })),
+  setPhase: (phase) => set({ phase, nightTarget: null, dayVote: null }),
+  setRound: (round) => set({ round }),
+  setMyRole: (role, team, teammates) => set({ myRole: role, myTeam: team, teammates: teammates || [] }),
   setPhaseTimer: (timer) => set({ phaseTimer: timer }),
   setNightTarget: (targetId) => set({ nightTarget: targetId }),
   setDayVote: (targetId) => set({ dayVote: targetId }),
+  setVoteCounts: (counts) => set({ voteCounts: counts }),
+  setNightResult: (result) => set({ nightResult: result }),
+  setDayResult: (result) => set({ dayResult: result }),
   setWinner: (winner) => set({ winner }),
   toggleReady: () => {
     const { players, playerId } = get()
@@ -141,10 +196,16 @@ export const useGameStore = create<GameState>((set, get) => ({
       settings: defaultSettings,
       isHost: false,
       phase: 'lobby',
+      round: 0,
       myRole: null,
+      myTeam: null,
+      teammates: [],
       phaseTimer: null,
       nightTarget: null,
       dayVote: null,
+      voteCounts: {},
+      nightResult: null,
+      dayResult: null,
       winner: null,
     }),
 }))

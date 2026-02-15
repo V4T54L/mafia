@@ -1,4 +1,4 @@
-import { useEffect, useRef, useCallback, useState } from 'react'
+import { createContext, useContext, useEffect, useRef, useState, useCallback, type ReactNode } from 'react'
 import { useGameStore } from '../stores/gameStore'
 
 // Message types
@@ -17,7 +17,16 @@ function getWebSocketUrl(): string {
   return `${protocol}//${host}/ws`
 }
 
-export function useWebSocket() {
+interface WebSocketContextValue {
+  send: (type: string, payload?: unknown) => boolean
+  once: (type: string, handler: (payload: unknown) => void) => void
+  connectionState: ConnectionState
+  isConnected: boolean
+}
+
+const WebSocketContext = createContext<WebSocketContextValue | null>(null)
+
+export function WebSocketProvider({ children }: { children: ReactNode }) {
   const wsRef = useRef<WebSocket | null>(null)
   const [connectionState, setConnectionState] = useState<ConnectionState>('disconnected')
   const reconnectTimeoutRef = useRef<number | null>(null)
@@ -33,6 +42,15 @@ export function useWebSocket() {
     addPlayer,
     removePlayer,
     updatePlayerReady,
+    updatePlayerStatus,
+    setPhase,
+    setRound,
+    setMyRole,
+    setPhaseTimer,
+    setVoteCounts,
+    setNightResult,
+    setDayResult,
+    setWinner,
   } = useGameStore()
 
   // Send a message through WebSocket
@@ -54,12 +72,9 @@ export function useWebSocket() {
     })
   }, [])
 
-  // Handle incoming messages
-  const handleMessage = useCallback((event: MessageEvent) => {
+  // Handle a single parsed message
+  const handleSingleMessage = useCallback((message: WSMessage) => {
     try {
-      const message: WSMessage = JSON.parse(event.data)
-      console.log('[WS] Received:', message.type, message.payload)
-
       // Check for one-time handlers first
       const handler = messageHandlersRef.current.get(message.type)
       if (handler) {
@@ -239,17 +254,173 @@ export function useWebSocket() {
           break
         }
 
+        // Game events
+        case 'game_starting': {
+          // Game is starting - navigate will happen when role is assigned
+          break
+        }
+
+        case 'role_assigned': {
+          const { role, team, teammates } = message.payload as {
+            role: string
+            team: string
+            teammates?: Array<{ id: string; nickname: string; role: string }>
+          }
+          setMyRole(
+            role as 'villager' | 'mafia' | 'godfather' | 'doctor' | 'detective',
+            team as 'town' | 'mafia',
+            teammates?.map((t) => ({
+              id: t.id,
+              nickname: t.nickname,
+              role: t.role as 'villager' | 'mafia' | 'godfather' | 'doctor' | 'detective',
+            }))
+          )
+          break
+        }
+
+        case 'phase_changed': {
+          const { phase, round, timer } = message.payload as {
+            phase: string
+            round: number
+            timer?: number
+          }
+          setPhase(phase as 'night' | 'day')
+          setRound(round)
+          if (timer !== undefined) {
+            setPhaseTimer(timer)
+          }
+          // Clear previous results when starting new phase
+          setNightResult(null)
+          setDayResult(null)
+          setVoteCounts({})
+          break
+        }
+
+        case 'timer_tick': {
+          const { remaining } = message.payload as { remaining: number }
+          setPhaseTimer(remaining)
+          break
+        }
+
+        case 'night_result': {
+          const payload = message.payload as {
+            killed?: string
+            killed_nickname?: string
+            was_saved?: boolean
+            investigation?: {
+              target_id: string
+              target_nickname: string
+              is_mafia: boolean
+            }
+          }
+
+          // Update player status if someone died
+          if (payload.killed) {
+            updatePlayerStatus(payload.killed, 'dead')
+          }
+
+          setNightResult({
+            killedId: payload.killed || null,
+            killedNickname: payload.killed_nickname || null,
+            wasSaved: payload.was_saved || false,
+            investigation: payload.investigation
+              ? {
+                  targetId: payload.investigation.target_id,
+                  targetNickname: payload.investigation.target_nickname,
+                  isMafia: payload.investigation.is_mafia,
+                }
+              : undefined,
+          })
+          setPhase('night_result')
+          break
+        }
+
+        case 'vote_update': {
+          const { votes } = message.payload as { votes: Record<string, number> }
+          setVoteCounts(votes)
+          break
+        }
+
+        case 'day_result': {
+          const payload = message.payload as {
+            eliminated?: string
+            eliminated_nickname?: string
+            eliminated_role?: string
+            votes: Record<string, number>
+            no_majority?: boolean
+          }
+
+          // Update player status if someone was eliminated
+          if (payload.eliminated) {
+            updatePlayerStatus(payload.eliminated, 'dead')
+          }
+
+          setDayResult({
+            eliminatedId: payload.eliminated || null,
+            eliminatedNickname: payload.eliminated_nickname || null,
+            eliminatedRole: (payload.eliminated_role as 'villager' | 'mafia' | 'godfather' | 'doctor' | 'detective') || null,
+            voteCounts: payload.votes,
+            noMajority: payload.no_majority || false,
+          })
+          setPhase('day_result')
+          break
+        }
+
+        case 'game_over': {
+          const { winner, players } = message.payload as {
+            winner: string
+            players: Array<{
+              id: string
+              nickname: string
+              role: string
+              status: string
+            }>
+          }
+
+          // Update all players with their revealed roles
+          setPlayers(
+            players.map((p) => ({
+              id: p.id,
+              nickname: p.nickname,
+              isHost: false,
+              isReady: false,
+              status: p.status as 'alive' | 'dead',
+              role: p.role as 'villager' | 'mafia' | 'godfather' | 'doctor' | 'detective',
+            }))
+          )
+
+          setWinner(winner as 'town' | 'mafia')
+          setPhase('game_over')
+          break
+        }
+
         default:
           console.log('[WS] Unhandled message:', message.type)
       }
     } catch (err) {
-      console.error('[WS] Failed to parse message:', err)
+      console.error('[WS] Failed to handle message:', err)
     }
-  }, [setPlayerId, setConnected, setRoomCode, setIsHost, setPlayers, setSettings, addPlayer, removePlayer, updatePlayerReady])
+  }, [setPlayerId, setConnected, setRoomCode, setIsHost, setPlayers, setSettings, addPlayer, removePlayer, updatePlayerReady, updatePlayerStatus, setPhase, setRound, setMyRole, setPhaseTimer, setVoteCounts, setNightResult, setDayResult, setWinner])
+
+  // Handle incoming messages (may be batched with newlines)
+  const handleMessage = useCallback((event: MessageEvent) => {
+    // Server may batch multiple messages separated by newlines
+    const messages = (event.data as string).split('\n').filter((line) => line.trim())
+
+    for (const msgStr of messages) {
+      try {
+        const message: WSMessage = JSON.parse(msgStr)
+        console.log('[WS] Received:', message.type, message.payload)
+        handleSingleMessage(message)
+      } catch (err) {
+        console.error('[WS] Failed to parse message:', err, msgStr)
+      }
+    }
+  }, [handleSingleMessage])
 
   // Connect to WebSocket
   const connect = useCallback(() => {
-    if (wsRef.current?.readyState === WebSocket.OPEN) {
+    if (wsRef.current?.readyState === WebSocket.OPEN || wsRef.current?.readyState === WebSocket.CONNECTING) {
       return
     }
 
@@ -286,21 +457,10 @@ export function useWebSocket() {
     }
   }, [handleMessage, setConnected])
 
-  // Disconnect from WebSocket
-  const disconnect = useCallback(() => {
-    if (reconnectTimeoutRef.current) {
-      clearTimeout(reconnectTimeoutRef.current)
-      reconnectTimeoutRef.current = null
-    }
-    if (wsRef.current) {
-      wsRef.current.close()
-      wsRef.current = null
-    }
-    setConnectionState('disconnected')
-  }, [])
-
-  // Cleanup on unmount
+  // Connect on mount
   useEffect(() => {
+    connect()
+
     return () => {
       if (reconnectTimeoutRef.current) {
         clearTimeout(reconnectTimeoutRef.current)
@@ -309,14 +469,26 @@ export function useWebSocket() {
         wsRef.current.close()
       }
     }
-  }, [])
+  }, [connect])
 
-  return {
-    connect,
-    disconnect,
+  const value: WebSocketContextValue = {
     send,
     once,
     connectionState,
     isConnected: connectionState === 'connected',
   }
+
+  return (
+    <WebSocketContext.Provider value={value}>
+      {children}
+    </WebSocketContext.Provider>
+  )
+}
+
+export function useWebSocket() {
+  const context = useContext(WebSocketContext)
+  if (!context) {
+    throw new Error('useWebSocket must be used within a WebSocketProvider')
+  }
+  return context
 }
