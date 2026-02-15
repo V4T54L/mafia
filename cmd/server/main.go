@@ -9,6 +9,7 @@ import (
 	"time"
 
 	httpAdapter "github.com/V4T54L/mafia/internal/adapter/http"
+	"github.com/V4T54L/mafia/internal/adapter/sfu"
 	"github.com/V4T54L/mafia/internal/adapter/ws"
 	"github.com/V4T54L/mafia/internal/domain/service"
 	"github.com/V4T54L/mafia/internal/pkg/config"
@@ -32,12 +33,21 @@ func main() {
 	roomService := service.NewRoomService(log)
 	gameService := service.NewGameService(roomService, log)
 
+	// Create SFU for voice chat
+	sfuConfig := sfu.DefaultConfig()
+	sfuInstance, err := sfu.New(sfuConfig, log)
+	if err != nil {
+		log.Error("failed to create SFU", "error", err)
+		os.Exit(1)
+	}
+	defer sfuInstance.Close()
+
 	// Create WebSocket hub
 	hub := ws.NewHub(log)
 	go hub.Run()
 
 	// Create message router
-	router := ws.NewRouter(hub, roomService, gameService, log)
+	router := ws.NewRouter(hub, roomService, gameService, sfuInstance, log)
 
 	// Create WebSocket handler
 	wsHandler := ws.NewHandler(hub, log, router.HandleMessage, router.HandleDisconnect)

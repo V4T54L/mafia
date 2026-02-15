@@ -4,8 +4,10 @@ import (
 	"encoding/json"
 	"log/slog"
 
+	"github.com/V4T54L/mafia/internal/adapter/sfu"
 	"github.com/V4T54L/mafia/internal/domain/entity"
 	"github.com/V4T54L/mafia/internal/domain/service"
+	"github.com/pion/webrtc/v4"
 )
 
 // Router handles WebSocket message routing
@@ -13,15 +15,17 @@ type Router struct {
 	hub         *Hub
 	roomService *service.RoomService
 	gameService *service.GameService
+	sfu         *sfu.SFU
 	logger      *slog.Logger
 }
 
 // NewRouter creates a new message router
-func NewRouter(hub *Hub, roomService *service.RoomService, gameService *service.GameService, logger *slog.Logger) *Router {
+func NewRouter(hub *Hub, roomService *service.RoomService, gameService *service.GameService, sfuInstance *sfu.SFU, logger *slog.Logger) *Router {
 	r := &Router{
 		hub:         hub,
 		roomService: roomService,
 		gameService: gameService,
+		sfu:         sfuInstance,
 		logger:      logger,
 	}
 
@@ -50,6 +54,17 @@ func (r *Router) HandleMessage(client *Client, msg *Message) {
 		r.handleNightAction(client, msg)
 	case MsgTypeDayVote:
 		r.handleDayVote(client, msg)
+	// Voice handlers
+	case MsgTypeVoiceJoin:
+		r.handleVoiceJoin(client)
+	case MsgTypeVoiceLeave:
+		r.handleVoiceLeave(client)
+	case MsgTypeVoiceOffer:
+		r.handleVoiceOffer(client, msg)
+	case MsgTypeVoiceCandidate:
+		r.handleVoiceCandidate(client, msg)
+	case MsgTypeSpeakingState:
+		r.handleSpeakingState(client, msg)
 	default:
 		client.SendError("unknown_message", "Unknown message type: "+msg.Type)
 	}
@@ -59,6 +74,15 @@ func (r *Router) HandleMessage(client *Client, msg *Message) {
 func (r *Router) HandleDisconnect(client *Client) {
 	if client.RoomCode == "" {
 		return
+	}
+
+	// Leave voice chat
+	if r.sfu != nil {
+		r.sfu.LeaveVoice(client.RoomCode, client.PlayerID)
+		// Notify others
+		r.hub.BroadcastToRoom(client.RoomCode, MustMessage(EventTypeVoiceLeft, VoiceLeftPayload{
+			PlayerID: client.PlayerID,
+		}), nil)
 	}
 
 	player, newHostID, err := r.roomService.LeaveRoom(client.RoomCode, client.PlayerID)
@@ -400,6 +424,177 @@ func (r *Router) handleDayVote(client *Client, msg *Message) {
 	}
 }
 
+// --- Voice handlers ---
+
+func (r *Router) handleVoiceJoin(client *Client) {
+	if client.RoomCode == "" {
+		client.SendError("not_in_room", "Not in a room")
+		return
+	}
+
+	if r.sfu == nil {
+		client.SendError("voice_unavailable", "Voice chat is not available")
+		return
+	}
+
+	participant, err := r.sfu.JoinVoice(client.RoomCode, client.PlayerID)
+	if err != nil {
+		client.SendError("voice_join_failed", "Failed to join voice: "+err.Error())
+		return
+	}
+
+	// Set up ICE candidate handler
+	if participant.PeerConn != nil {
+		participant.PeerConn.OnICECandidate(func(candidate *webrtc.ICECandidate) {
+			if candidate == nil {
+				return
+			}
+			candidateJSON := candidate.ToJSON()
+			usernameFrag := ""
+			if candidateJSON.UsernameFragment != nil {
+				usernameFrag = *candidateJSON.UsernameFragment
+			}
+			client.Send(MustMessage(EventTypeVoiceCandidate, VoiceCandidatePayload{
+				Candidate:        candidateJSON.Candidate,
+				SDPMid:           *candidateJSON.SDPMid,
+				SDPMLineIndex:    *candidateJSON.SDPMLineIndex,
+				UsernameFragment: usernameFrag,
+			}))
+		})
+
+		// Handle incoming audio tracks
+		participant.PeerConn.OnTrack(func(track *webrtc.TrackRemote, receiver *webrtc.RTPReceiver) {
+			r.logger.Debug("received audio track",
+				"player", client.PlayerID,
+				"track", track.ID(),
+			)
+		})
+	}
+
+	// Notify others in room
+	r.hub.BroadcastToRoom(client.RoomCode, MustMessage(EventTypeVoiceJoined, VoiceJoinedPayload{
+		PlayerID: client.PlayerID,
+	}), client)
+
+	r.logger.Info("player joined voice",
+		"room", client.RoomCode,
+		"player", client.PlayerID,
+	)
+}
+
+func (r *Router) handleVoiceLeave(client *Client) {
+	if client.RoomCode == "" {
+		return
+	}
+
+	if r.sfu != nil {
+		r.sfu.LeaveVoice(client.RoomCode, client.PlayerID)
+	}
+
+	// Notify others in room
+	r.hub.BroadcastToRoom(client.RoomCode, MustMessage(EventTypeVoiceLeft, VoiceLeftPayload{
+		PlayerID: client.PlayerID,
+	}), client)
+
+	r.logger.Info("player left voice",
+		"room", client.RoomCode,
+		"player", client.PlayerID,
+	)
+}
+
+func (r *Router) handleVoiceOffer(client *Client, msg *Message) {
+	if client.RoomCode == "" {
+		client.SendError("not_in_room", "Not in a room")
+		return
+	}
+
+	if r.sfu == nil {
+		client.SendError("voice_unavailable", "Voice chat is not available")
+		return
+	}
+
+	var payload VoiceOfferPayload
+	if err := json.Unmarshal(msg.Payload, &payload); err != nil {
+		client.SendError("invalid_payload", "Invalid voice offer payload")
+		return
+	}
+
+	offer := webrtc.SessionDescription{
+		Type: webrtc.SDPTypeOffer,
+		SDP:  payload.SDP,
+	}
+
+	answer, err := r.sfu.HandleOffer(client.RoomCode, client.PlayerID, offer)
+	if err != nil {
+		client.SendError("voice_offer_failed", "Failed to process offer: "+err.Error())
+		return
+	}
+
+	client.Send(MustMessage(EventTypeVoiceAnswer, VoiceAnswerPayload{
+		SDP: answer.SDP,
+	}))
+
+	r.logger.Debug("voice offer/answer complete",
+		"room", client.RoomCode,
+		"player", client.PlayerID,
+	)
+}
+
+func (r *Router) handleVoiceCandidate(client *Client, msg *Message) {
+	if client.RoomCode == "" {
+		client.SendError("not_in_room", "Not in a room")
+		return
+	}
+
+	if r.sfu == nil {
+		client.SendError("voice_unavailable", "Voice chat is not available")
+		return
+	}
+
+	var payload VoiceCandidatePayload
+	if err := json.Unmarshal(msg.Payload, &payload); err != nil {
+		client.SendError("invalid_payload", "Invalid voice candidate payload")
+		return
+	}
+
+	usernameFrag := payload.UsernameFragment
+	candidate := webrtc.ICECandidateInit{
+		Candidate:        payload.Candidate,
+		SDPMid:           &payload.SDPMid,
+		SDPMLineIndex:    &payload.SDPMLineIndex,
+		UsernameFragment: &usernameFrag,
+	}
+
+	if err := r.sfu.AddICECandidate(client.RoomCode, client.PlayerID, candidate); err != nil {
+		r.logger.Warn("failed to add ICE candidate",
+			"error", err,
+			"player", client.PlayerID,
+		)
+	}
+}
+
+func (r *Router) handleSpeakingState(client *Client, msg *Message) {
+	if client.RoomCode == "" {
+		return
+	}
+
+	var payload SpeakingStatePayload
+	if err := json.Unmarshal(msg.Payload, &payload); err != nil {
+		return
+	}
+
+	// Update SFU state
+	if r.sfu != nil {
+		r.sfu.SetSpeakingState(client.RoomCode, client.PlayerID, payload.Speaking)
+	}
+
+	// Broadcast to others in room
+	r.hub.BroadcastToRoom(client.RoomCode, MustMessage(EventTypeSpeakingState, SpeakingStatePayload{
+		PlayerID: client.PlayerID,
+		Speaking: payload.Speaking,
+	}), nil)
+}
+
 // handleGameEvent processes events from the game service
 func (r *Router) handleGameEvent(event service.GameEvent) {
 	switch event.Type {
@@ -415,6 +610,8 @@ func (r *Router) handleGameEvent(event service.GameEvent) {
 
 	case service.EventPhaseChanged:
 		r.hub.BroadcastToRoom(event.RoomCode, MustMessage(EventTypePhaseChanged, event.Data), nil)
+		// Apply voice routing on phase change
+		r.applyVoiceRouting(event.RoomCode, event.Data)
 
 	case service.EventTimerTick:
 		r.hub.BroadcastToRoom(event.RoomCode, MustMessage(EventTypeTimerTick, event.Data), nil)
@@ -439,5 +636,96 @@ func (r *Router) handleGameEvent(event service.GameEvent) {
 
 	case service.EventGameOver:
 		r.hub.BroadcastToRoom(event.RoomCode, MustMessage(EventTypeGameOver, event.Data), nil)
+		// Apply game over voice routing (everyone can talk)
+		r.applyVoiceRouting(event.RoomCode, map[string]any{"phase": "game_over"})
+
+	case service.EventVoiceRouting:
+		// Broadcast voice routing to clients
+		r.hub.BroadcastToRoom(event.RoomCode, MustMessage(EventTypeVoiceRouting, event.Data), nil)
 	}
+}
+
+// applyVoiceRouting applies voice routing rules based on game phase
+func (r *Router) applyVoiceRouting(roomCode string, phaseData any) {
+	if r.sfu == nil {
+		return
+	}
+
+	// Get game state
+	game := r.gameService.GetGame(roomCode)
+	if game == nil {
+		return
+	}
+
+	// Build voice routing state
+	var phase sfu.GamePhase
+	if data, ok := phaseData.(map[string]any); ok {
+		if p, ok := data["phase"].(string); ok {
+			switch p {
+			case "night":
+				phase = sfu.PhaseNight
+			case "day":
+				phase = sfu.PhaseDay
+			case "game_over":
+				phase = sfu.PhaseGameOver
+			default:
+				phase = sfu.PhaseLobby
+			}
+		}
+	}
+
+	// Build player voice states
+	var players []sfu.PlayerVoiceState
+	for playerID, role := range game.Roles {
+		player := game.Room.GetPlayer(playerID)
+		if player == nil {
+			continue
+		}
+
+		team := sfu.TeamTown
+		if role.GetTeam() == entity.TeamMafia {
+			team = sfu.TeamMafia
+		}
+
+		players = append(players, sfu.PlayerVoiceState{
+			ID:      playerID,
+			Team:    team,
+			IsAlive: player.Status == entity.PlayerStatusAlive,
+		})
+	}
+
+	// Apply routing
+	state := sfu.VoiceRoutingState{
+		Phase:   phase,
+		Players: players,
+	}
+	r.sfu.ApplyVoiceRouting(roomCode, state)
+
+	// Build and broadcast voice routing to clients
+	routing := sfu.CalculateRouting(phase, convertToPlayerInfo(players))
+	var clientRouting []VoiceRoutingPlayerState
+	for _, ps := range routing {
+		clientRouting = append(clientRouting, VoiceRoutingPlayerState{
+			PlayerID: ps.ID,
+			CanSpeak: ps.CanSpeak,
+			CanHear:  ps.CanHear,
+		})
+	}
+
+	r.hub.BroadcastToRoom(roomCode, MustMessage(EventTypeVoiceRouting, VoiceRoutingPayload{
+		Phase:   string(phase),
+		Players: clientRouting,
+	}), nil)
+}
+
+func convertToPlayerInfo(players []sfu.PlayerVoiceState) []sfu.PlayerInfo {
+	result := make([]sfu.PlayerInfo, len(players))
+	for i, p := range players {
+		result[i] = sfu.PlayerInfo{
+			ID:      p.ID,
+			Team:    p.Team,
+			IsAlive: p.IsAlive,
+		}
+	}
+	return result
 }

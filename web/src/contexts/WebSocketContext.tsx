@@ -17,9 +17,13 @@ function getWebSocketUrl(): string {
   return `${protocol}//${host}/ws`
 }
 
+// Message handler for subscribing to specific message types
+type MessageHandler = (payload: unknown) => void
+
 interface WebSocketContextValue {
   send: (type: string, payload?: unknown) => boolean
   once: (type: string, handler: (payload: unknown) => void) => void
+  subscribe: (type: string, handler: MessageHandler) => () => void
   connectionState: ConnectionState
   isConnected: boolean
 }
@@ -31,6 +35,7 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
   const [connectionState, setConnectionState] = useState<ConnectionState>('disconnected')
   const reconnectTimeoutRef = useRef<number | null>(null)
   const messageHandlersRef = useRef<Map<string, (payload: unknown) => void>>(new Map())
+  const subscribersRef = useRef<Map<string, Set<MessageHandler>>>(new Map())
 
   const {
     setPlayerId,
@@ -43,6 +48,7 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
     removePlayer,
     updatePlayerReady,
     updatePlayerStatus,
+    updatePlayerSpeaking,
     setPhase,
     setRound,
     setMyRole,
@@ -72,6 +78,25 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
     })
   }, [])
 
+  // Subscribe to a message type (returns unsubscribe function)
+  const subscribe = useCallback((type: string, handler: MessageHandler) => {
+    if (!subscribersRef.current.has(type)) {
+      subscribersRef.current.set(type, new Set())
+    }
+    subscribersRef.current.get(type)!.add(handler)
+
+    // Return unsubscribe function
+    return () => {
+      const handlers = subscribersRef.current.get(type)
+      if (handlers) {
+        handlers.delete(handler)
+        if (handlers.size === 0) {
+          subscribersRef.current.delete(type)
+        }
+      }
+    }
+  }, [])
+
   // Handle a single parsed message
   const handleSingleMessage = useCallback((message: WSMessage) => {
     try {
@@ -80,6 +105,12 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
       if (handler) {
         handler(message.payload)
         return
+      }
+
+      // Notify subscribers
+      const subscribers = subscribersRef.current.get(message.type)
+      if (subscribers) {
+        subscribers.forEach(sub => sub(message.payload))
       }
 
       // Handle standard events
@@ -394,13 +425,32 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
           break
         }
 
+        // Voice events
+        case 'speaking_state': {
+          const { player_id, speaking } = message.payload as {
+            player_id: string
+            speaking: boolean
+          }
+          updatePlayerSpeaking(player_id, speaking)
+          break
+        }
+
+        case 'voice_joined':
+        case 'voice_left':
+        case 'voice_offer':
+        case 'voice_answer':
+        case 'voice_candidate':
+        case 'voice_routing':
+          // These are handled by VoiceContext
+          break
+
         default:
           console.log('[WS] Unhandled message:', message.type)
       }
     } catch (err) {
       console.error('[WS] Failed to handle message:', err)
     }
-  }, [setPlayerId, setConnected, setRoomCode, setIsHost, setPlayers, setSettings, addPlayer, removePlayer, updatePlayerReady, updatePlayerStatus, setPhase, setRound, setMyRole, setPhaseTimer, setVoteCounts, setNightResult, setDayResult, setWinner])
+  }, [setPlayerId, setConnected, setRoomCode, setIsHost, setPlayers, setSettings, addPlayer, removePlayer, updatePlayerReady, updatePlayerStatus, updatePlayerSpeaking, setPhase, setRound, setMyRole, setPhaseTimer, setVoteCounts, setNightResult, setDayResult, setWinner])
 
   // Handle incoming messages (may be batched with newlines)
   const handleMessage = useCallback((event: MessageEvent) => {
@@ -474,6 +524,7 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
   const value: WebSocketContextValue = {
     send,
     once,
+    subscribe,
     connectionState,
     isConnected: connectionState === 'connected',
   }

@@ -20,6 +20,7 @@ const (
 	EventDayResult      GameEventType = "day_result"
 	EventVoteUpdate     GameEventType = "vote_update"
 	EventGameOver       GameEventType = "game_over"
+	EventVoiceRouting   GameEventType = "voice_routing"
 )
 
 // GameEvent is emitted when game state changes

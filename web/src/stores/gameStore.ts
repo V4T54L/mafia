@@ -87,6 +87,7 @@ export interface GameState {
   updatePlayerReady: (playerId: string, ready: boolean) => void
   updatePlayerStatus: (playerId: string, status: PlayerStatus) => void
   updatePlayerRole: (playerId: string, role: Role) => void
+  updatePlayerSpeaking: (playerId: string, speaking: boolean) => void
   setPhase: (phase: GamePhase) => void
   setRound: (round: number) => void
   setMyRole: (role: Role, team: Team, teammates?: Teammate[]) => void
@@ -168,6 +169,10 @@ export const useGameStore = create<GameState>((set, get) => ({
   updatePlayerRole: (playerId, role) =>
     set((state) => ({
       players: state.players.map((p) => (p.id === playerId ? { ...p, role } : p)),
+    })),
+  updatePlayerSpeaking: (playerId, speaking) =>
+    set((state) => ({
+      players: state.players.map((p) => (p.id === playerId ? { ...p, isSpeaking: speaking } : p)),
     })),
   setPhase: (phase) => set({ phase, nightTarget: null, dayVote: null }),
   setRound: (round) => set({ round }),

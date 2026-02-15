@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { Button } from '../components/ui'
+import { VoiceControls } from '../components/VoiceControls'
 import { useGameStore, type Player, type GameSettings } from '../stores/gameStore'
 import { useWebSocket } from '../contexts/WebSocketContext'
 
@@ -278,6 +279,9 @@ export function Lobby() {
               </div>
             ))}
           </div>
+
+          {/* Voice Chat */}
+          <VoiceControls variant="full" />
 
           {/* Settings */}
           <SettingsPanel settings={settings} onChange={handleUpdateSettings} disabled={!isHost} />

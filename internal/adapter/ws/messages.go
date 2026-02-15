@@ -10,13 +10,21 @@ const (
 	MsgTypeLeaveRoom  = "leave_room"
 
 	// Lobby actions
-	MsgTypeReady        = "ready"
+	MsgTypeReady          = "ready"
 	MsgTypeUpdateSettings = "update_settings"
-	MsgTypeStartGame    = "start_game"
+	MsgTypeStartGame      = "start_game"
 
 	// Game actions
 	MsgTypeNightAction = "night_action"
 	MsgTypeDayVote     = "day_vote"
+
+	// Voice actions
+	MsgTypeVoiceJoin      = "voice_join"
+	MsgTypeVoiceLeave     = "voice_leave"
+	MsgTypeVoiceOffer     = "voice_offer"
+	MsgTypeVoiceAnswer    = "voice_answer"
+	MsgTypeVoiceCandidate = "voice_candidate"
+	MsgTypeSpeakingState  = "speaking_state"
 )
 
 // Event types (server -> client)
@@ -26,27 +34,36 @@ const (
 	EventTypeError     = "error"
 
 	// Room events
-	EventTypeRoomCreated = "room_created"
-	EventTypeRoomJoined  = "room_joined"
+	EventTypeRoomCreated  = "room_created"
+	EventTypeRoomJoined   = "room_joined"
 	EventTypePlayerJoined = "player_joined"
 	EventTypePlayerLeft   = "player_left"
 
 	// Lobby events
-	EventTypePlayerReady    = "player_ready"
+	EventTypePlayerReady     = "player_ready"
 	EventTypeSettingsUpdated = "settings_updated"
-	EventTypeGameStarting   = "game_starting"
+	EventTypeGameStarting    = "game_starting"
 
 	// Game events
-	EventTypeRoleAssigned  = "role_assigned"
-	EventTypePhaseChanged  = "phase_changed"
-	EventTypeTimerTick     = "timer_tick"
-	EventTypeNightResult   = "night_result"
-	EventTypeDayResult     = "day_result"
-	EventTypeGameOver      = "game_over"
+	EventTypeRoleAssigned = "role_assigned"
+	EventTypePhaseChanged = "phase_changed"
+	EventTypeTimerTick    = "timer_tick"
+	EventTypeNightResult  = "night_result"
+	EventTypeDayResult    = "day_result"
+	EventTypeGameOver     = "game_over"
 
 	// State sync
 	EventTypeRoomState = "room_state"
 	EventTypeGameState = "game_state"
+
+	// Voice events
+	EventTypeVoiceJoined    = "voice_joined"
+	EventTypeVoiceLeft      = "voice_left"
+	EventTypeVoiceOffer     = "voice_offer"
+	EventTypeVoiceAnswer    = "voice_answer"
+	EventTypeVoiceCandidate = "voice_candidate"
+	EventTypeSpeakingState  = "speaking_state"
+	EventTypeVoiceRouting   = "voice_routing"
 )
 
 // Message is the envelope for all WebSocket messages
@@ -210,7 +227,56 @@ type DayResultPayload struct {
 
 // GameOverPayload is sent when game ends
 type GameOverPayload struct {
-	Winner  string      `json:"winner"` // "town" or "mafia"
-	Players []PlayerDTO `json:"players"`
+	Winner  string            `json:"winner"` // "town" or "mafia"
+	Players []PlayerDTO       `json:"players"`
 	Roles   map[string]string `json:"roles"` // player ID -> role
+}
+
+// --- Voice payload types ---
+
+// VoiceOfferPayload is sent by client with SDP offer
+type VoiceOfferPayload struct {
+	SDP string `json:"sdp"`
+}
+
+// VoiceAnswerPayload is sent by server with SDP answer
+type VoiceAnswerPayload struct {
+	SDP string `json:"sdp"`
+}
+
+// VoiceCandidatePayload is sent for ICE candidates
+type VoiceCandidatePayload struct {
+	Candidate        string `json:"candidate"`
+	SDPMid           string `json:"sdp_mid"`
+	SDPMLineIndex    uint16 `json:"sdp_mline_index"`
+	UsernameFragment string `json:"username_fragment,omitempty"`
+}
+
+// SpeakingStatePayload is sent when speaking state changes
+type SpeakingStatePayload struct {
+	PlayerID string `json:"player_id"`
+	Speaking bool   `json:"speaking"`
+}
+
+// VoiceRoutingPayload is sent when voice permissions change
+type VoiceRoutingPayload struct {
+	Phase    string                     `json:"phase"`
+	Players  []VoiceRoutingPlayerState  `json:"players"`
+}
+
+// VoiceRoutingPlayerState represents a player's voice permissions
+type VoiceRoutingPlayerState struct {
+	PlayerID string   `json:"player_id"`
+	CanSpeak bool     `json:"can_speak"`
+	CanHear  []string `json:"can_hear"` // player IDs this player can hear
+}
+
+// VoiceJoinedPayload is sent when a player joins voice
+type VoiceJoinedPayload struct {
+	PlayerID string `json:"player_id"`
+}
+
+// VoiceLeftPayload is sent when a player leaves voice
+type VoiceLeftPayload struct {
+	PlayerID string `json:"player_id"`
 }

@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Button } from '../components/ui'
+import { VoiceControls } from '../components/VoiceControls'
 import { useGameStore } from '../stores/gameStore'
 import { useWebSocket } from '../contexts/WebSocketContext'
 import type { Role, Player, Team } from '../stores/gameStore'
@@ -629,6 +630,7 @@ export function Game() {
           <div className="text-text-secondary text-sm">
             Room: <span className="font-mono">{roomCode || code}</span>
           </div>
+          <VoiceControls variant="compact" />
           <div className="text-text-secondary text-sm">
             {roleInfo[myRole].icon} {roleInfo[myRole].name}
           </div>
