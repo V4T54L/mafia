@@ -10,6 +10,7 @@ import (
 
 	httpAdapter "github.com/V4T54L/mafia/internal/adapter/http"
 	"github.com/V4T54L/mafia/internal/adapter/ws"
+	"github.com/V4T54L/mafia/internal/domain/service"
 	"github.com/V4T54L/mafia/internal/pkg/config"
 	"github.com/V4T54L/mafia/internal/pkg/logger"
 )
@@ -27,12 +28,18 @@ func main() {
 		"staticDir", cfg.StaticDir,
 	)
 
+	// Create services
+	roomService := service.NewRoomService(log)
+
 	// Create WebSocket hub
 	hub := ws.NewHub(log)
 	go hub.Run()
 
-	// Create WebSocket handler with message router
-	wsHandler := ws.NewHandler(hub, log, handleMessage)
+	// Create message router
+	router := ws.NewRouter(hub, roomService, log)
+
+	// Create WebSocket handler
+	wsHandler := ws.NewHandler(hub, log, router.HandleMessage, router.HandleDisconnect)
 
 	// Create HTTP server
 	server := httpAdapter.NewServer(log, cfg.StaticDir, wsHandler)
@@ -70,21 +77,4 @@ func main() {
 	}
 
 	log.Info("server stopped")
-}
-
-// handleMessage routes incoming WebSocket messages
-// TODO: Move to a dedicated message router when game logic is added
-func handleMessage(client *ws.Client, msg *ws.Message) {
-	switch msg.Type {
-	case ws.MsgTypeCreateRoom:
-		// TODO: Implement room creation
-		client.SendError("not_implemented", "Room creation not yet implemented")
-
-	case ws.MsgTypeJoinRoom:
-		// TODO: Implement room joining
-		client.SendError("not_implemented", "Room joining not yet implemented")
-
-	default:
-		client.SendError("unknown_message", "Unknown message type: "+msg.Type)
-	}
 }

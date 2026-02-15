@@ -20,17 +20,19 @@ var upgrader = websocket.Upgrader{
 
 // Handler handles WebSocket connections
 type Handler struct {
-	hub       *Hub
-	logger    *slog.Logger
-	onMessage func(*Client, *Message)
+	hub          *Hub
+	logger       *slog.Logger
+	onMessage    func(*Client, *Message)
+	onDisconnect func(*Client)
 }
 
 // NewHandler creates a new WebSocket handler
-func NewHandler(hub *Hub, logger *slog.Logger, onMessage func(*Client, *Message)) *Handler {
+func NewHandler(hub *Hub, logger *slog.Logger, onMessage func(*Client, *Message), onDisconnect func(*Client)) *Handler {
 	return &Handler{
-		hub:       hub,
-		logger:    logger,
-		onMessage: onMessage,
+		hub:          hub,
+		logger:       logger,
+		onMessage:    onMessage,
+		onDisconnect: onDisconnect,
 	}
 }
 
@@ -45,7 +47,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// Generate a unique player ID
 	playerID := id.Generate()
 
-	client := NewClient(h.hub, conn, playerID, h.logger, h.onMessage)
+	client := NewClient(h.hub, conn, playerID, h.logger, h.onMessage, h.onDisconnect)
 	h.hub.Register(client)
 
 	// Send connected event

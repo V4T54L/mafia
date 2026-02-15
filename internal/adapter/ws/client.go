@@ -42,23 +42,30 @@ type Client struct {
 
 	// Message handler callback
 	onMessage func(*Client, *Message)
+
+	// Disconnect handler callback
+	onDisconnect func(*Client)
 }
 
 // NewClient creates a new Client
-func NewClient(hub *Hub, conn *websocket.Conn, playerID string, logger *slog.Logger, onMessage func(*Client, *Message)) *Client {
+func NewClient(hub *Hub, conn *websocket.Conn, playerID string, logger *slog.Logger, onMessage func(*Client, *Message), onDisconnect func(*Client)) *Client {
 	return &Client{
-		hub:       hub,
-		conn:      conn,
-		send:      make(chan []byte, 256),
-		PlayerID:  playerID,
-		logger:    logger,
-		onMessage: onMessage,
+		hub:          hub,
+		conn:         conn,
+		send:         make(chan []byte, 256),
+		PlayerID:     playerID,
+		logger:       logger,
+		onMessage:    onMessage,
+		onDisconnect: onDisconnect,
 	}
 }
 
 // ReadPump pumps messages from the websocket connection to the hub
 func (c *Client) ReadPump() {
 	defer func() {
+		if c.onDisconnect != nil {
+			c.onDisconnect(c)
+		}
 		c.hub.Unregister(c)
 		c.conn.Close()
 	}()
