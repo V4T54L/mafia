@@ -1,7 +1,9 @@
 import { motion } from 'framer-motion'
+import { useNavigate } from 'react-router-dom'
 import { Button } from '../ui'
 
 export function HeroSection() {
+  const navigate = useNavigate()
   return (
     <section className="min-h-screen flex flex-col items-center justify-center px-4 py-12 text-center bg-bg-primary relative overflow-hidden">
       {/* Subtle noise texture */}
@@ -51,10 +53,10 @@ export function HeroSection() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.8, duration: 0.6 }}
         >
-          <Button size="lg" fullWidth variant="danger" glow>
+          <Button size="lg" fullWidth variant="danger" glow onClick={() => navigate('/join')}>
             Start Hunting
           </Button>
-          <Button variant="secondary" size="lg" fullWidth>
+          <Button variant="secondary" size="lg" fullWidth onClick={() => navigate('/join')}>
             I Have a Code
           </Button>
         </motion.div>

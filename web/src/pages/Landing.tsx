@@ -1,4 +1,5 @@
 import { motion } from 'framer-motion'
+import { useNavigate } from 'react-router-dom'
 import { Button } from '../components/ui'
 import { HeroSection } from '../components/landing/HeroSection'
 import { HowItWorksSection } from '../components/landing/HowItWorksSection'
@@ -8,6 +9,8 @@ import { WhyMafiaSection } from '../components/landing/WhyMafiaSection'
 import { Footer } from '../components/landing/Footer'
 
 export function Landing() {
+  const navigate = useNavigate()
+
   return (
     <div className="flex flex-col min-h-screen">
       <HeroSection />
@@ -34,7 +37,7 @@ export function Landing() {
           <p className="text-lg text-text-secondary mb-8 max-w-sm mx-auto">
             Gather your friends. Find the traitors. Trust no one.
           </p>
-          <Button size="lg" variant="danger" glow className="mb-4">
+          <Button size="lg" variant="danger" glow className="mb-4" onClick={() => navigate('/join')}>
             Start Hunting
           </Button>
           <p className="text-sm text-text-disabled">Best with 6-12 players</p>
