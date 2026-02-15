@@ -219,3 +219,31 @@ func (h *Hub) GetClient(playerID string) *Client {
 	}
 	return nil
 }
+
+// BroadcastToPlayers sends a message to specific players in a room
+func (h *Hub) BroadcastToPlayers(roomCode string, playerIDs []string, msg *Message) {
+	h.mu.RLock()
+	room, ok := h.rooms[roomCode]
+	h.mu.RUnlock()
+
+	if !ok {
+		return
+	}
+
+	// Create a set of target player IDs for O(1) lookup
+	targetSet := make(map[string]bool, len(playerIDs))
+	for _, id := range playerIDs {
+		targetSet[id] = true
+	}
+
+	data := msg.Bytes()
+	for client := range room {
+		if targetSet[client.PlayerID] {
+			select {
+			case client.send <- data:
+			default:
+				h.logger.Warn("client send buffer full", "player_id", client.PlayerID)
+			}
+		}
+	}
+}

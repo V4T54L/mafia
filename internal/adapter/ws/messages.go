@@ -17,6 +17,7 @@ const (
 	// Game actions
 	MsgTypeNightAction = "night_action"
 	MsgTypeDayVote     = "day_vote"
+	MsgTypeGhostChat   = "ghost_chat"
 
 	// Voice actions
 	MsgTypeVoiceJoin      = "voice_join"
@@ -50,7 +51,8 @@ const (
 	EventTypeTimerTick    = "timer_tick"
 	EventTypeNightResult  = "night_result"
 	EventTypeDayResult    = "day_result"
-	EventTypeGameOver     = "game_over"
+	EventTypeGameOver        = "game_over"
+	EventTypeGhostChatBroadcast = "ghost_chat_broadcast"
 
 	// State sync
 	EventTypeRoomState = "room_state"
@@ -147,6 +149,19 @@ type NightActionPayload struct {
 // DayVotePayload is sent by player during day
 type DayVotePayload struct {
 	TargetID string `json:"target_id,omitempty"` // empty = skip vote
+}
+
+// GhostChatPayload is sent by dead players to chat
+type GhostChatPayload struct {
+	Message string `json:"message"`
+}
+
+// GhostChatBroadcastPayload is sent to dead players
+type GhostChatBroadcastPayload struct {
+	FromID       string `json:"from_id"`
+	FromNickname string `json:"from_nickname"`
+	Message      string `json:"message"`
+	Timestamp    int64  `json:"timestamp"`
 }
 
 // --- Event payloads (server -> client) ---

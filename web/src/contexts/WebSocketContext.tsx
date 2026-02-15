@@ -57,6 +57,7 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
     setNightResult,
     setDayResult,
     setWinner,
+    addGhostMessage,
   } = useGameStore()
 
   // Send a message through WebSocket
@@ -444,13 +445,30 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
           // These are handled by VoiceContext
           break
 
+        // Ghost chat events
+        case 'ghost_chat_broadcast': {
+          const { from_id, from_nickname, message: text, timestamp } = message.payload as {
+            from_id: string
+            from_nickname: string
+            message: string
+            timestamp: number
+          }
+          addGhostMessage({
+            fromId: from_id,
+            fromNickname: from_nickname,
+            message: text,
+            timestamp,
+          })
+          break
+        }
+
         default:
           console.log('[WS] Unhandled message:', message.type)
       }
     } catch (err) {
       console.error('[WS] Failed to handle message:', err)
     }
-  }, [setPlayerId, setConnected, setRoomCode, setIsHost, setPlayers, setSettings, addPlayer, removePlayer, updatePlayerReady, updatePlayerStatus, updatePlayerSpeaking, setPhase, setRound, setMyRole, setPhaseTimer, setVoteCounts, setNightResult, setDayResult, setWinner])
+  }, [setPlayerId, setConnected, setRoomCode, setIsHost, setPlayers, setSettings, addPlayer, removePlayer, updatePlayerReady, updatePlayerStatus, updatePlayerSpeaking, setPhase, setRound, setMyRole, setPhaseTimer, setVoteCounts, setNightResult, setDayResult, setWinner, addGhostMessage])
 
   // Handle incoming messages (may be batched with newlines)
   const handleMessage = useCallback((event: MessageEvent) => {

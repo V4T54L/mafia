@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Button } from '../components/ui'
 import { VoiceControls } from '../components/VoiceControls'
+import { GhostChat } from '../components/GhostChat'
 import { useGameStore } from '../stores/gameStore'
 import { useWebSocket } from '../contexts/WebSocketContext'
 import type { Role, Player, Team } from '../stores/gameStore'
@@ -563,6 +564,7 @@ export function Game() {
   const { code } = useParams()
   const navigate = useNavigate()
   const { send, isConnected } = useWebSocket()
+  const [isGhostChatOpen, setIsGhostChatOpen] = useState(false)
 
   const {
     phase,
@@ -682,6 +684,12 @@ export function Game() {
           onLeave={handleLeave}
         />
       )}
+
+      {/* Ghost chat for dead players */}
+      <GhostChat
+        isOpen={isGhostChatOpen}
+        onToggle={() => setIsGhostChatOpen(!isGhostChatOpen)}
+      />
     </div>
   )
 }

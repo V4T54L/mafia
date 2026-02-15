@@ -50,6 +50,13 @@ export interface DayResult {
   noMajority: boolean
 }
 
+export interface GhostMessage {
+  fromId: string
+  fromNickname: string
+  message: string
+  timestamp: number
+}
+
 export interface GameState {
   // Connection
   roomCode: string | null
@@ -74,6 +81,7 @@ export interface GameState {
   nightResult: NightResult | null
   dayResult: DayResult | null
   winner: Team | null
+  ghostMessages: GhostMessage[]
 
   // Actions
   setRoomCode: (code: string | null) => void
@@ -98,6 +106,8 @@ export interface GameState {
   setNightResult: (result: NightResult | null) => void
   setDayResult: (result: DayResult | null) => void
   setWinner: (winner: Team | null) => void
+  addGhostMessage: (message: GhostMessage) => void
+  clearGhostMessages: () => void
   toggleReady: () => void
   reset: () => void
 }
@@ -141,6 +151,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   nightResult: null,
   dayResult: null,
   winner: null,
+  ghostMessages: [],
 
   // Actions
   setRoomCode: (code) => set({ roomCode: code }),
@@ -184,6 +195,11 @@ export const useGameStore = create<GameState>((set, get) => ({
   setNightResult: (result) => set({ nightResult: result }),
   setDayResult: (result) => set({ dayResult: result }),
   setWinner: (winner) => set({ winner }),
+  addGhostMessage: (message) =>
+    set((state) => ({
+      ghostMessages: [...state.ghostMessages, message].slice(-50), // Keep last 50 messages
+    })),
+  clearGhostMessages: () => set({ ghostMessages: [] }),
   toggleReady: () => {
     const { players, playerId } = get()
     set({
@@ -212,5 +228,6 @@ export const useGameStore = create<GameState>((set, get) => ({
       nightResult: null,
       dayResult: null,
       winner: null,
+      ghostMessages: [],
     }),
 }))

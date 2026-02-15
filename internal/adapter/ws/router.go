@@ -3,6 +3,7 @@ package ws
 import (
 	"encoding/json"
 	"log/slog"
+	"time"
 
 	"github.com/V4T54L/mafia/internal/adapter/sfu"
 	"github.com/V4T54L/mafia/internal/domain/entity"
@@ -54,6 +55,8 @@ func (r *Router) HandleMessage(client *Client, msg *Message) {
 		r.handleNightAction(client, msg)
 	case MsgTypeDayVote:
 		r.handleDayVote(client, msg)
+	case MsgTypeGhostChat:
+		r.handleGhostChat(client, msg)
 	// Voice handlers
 	case MsgTypeVoiceJoin:
 		r.handleVoiceJoin(client)
@@ -422,6 +425,67 @@ func (r *Router) handleDayVote(client *Client, msg *Message) {
 		}
 		return
 	}
+}
+
+func (r *Router) handleGhostChat(client *Client, msg *Message) {
+	if client.RoomCode == "" {
+		client.SendError("not_in_room", "Not in a room")
+		return
+	}
+
+	var payload GhostChatPayload
+	if err := json.Unmarshal(msg.Payload, &payload); err != nil {
+		client.SendError("invalid_payload", "Invalid ghost chat payload")
+		return
+	}
+
+	// Validate message
+	if payload.Message == "" || len(payload.Message) > 500 {
+		client.SendError("invalid_message", "Message must be 1-500 characters")
+		return
+	}
+
+	// Get game and verify player is dead
+	game := r.gameService.GetGame(client.RoomCode)
+	if game == nil {
+		client.SendError("game_not_found", "Game not found")
+		return
+	}
+
+	player := game.Room.GetPlayer(client.PlayerID)
+	if player == nil {
+		client.SendError("player_not_found", "Player not found")
+		return
+	}
+
+	if player.Status != entity.PlayerStatusDead {
+		client.SendError("not_dead", "Only dead players can use ghost chat")
+		return
+	}
+
+	// Get all dead player IDs
+	var deadPlayerIDs []string
+	for _, p := range game.Room.Players {
+		if p.Status == entity.PlayerStatusDead {
+			deadPlayerIDs = append(deadPlayerIDs, p.ID)
+		}
+	}
+
+	// Broadcast to all dead players
+	broadcastPayload := GhostChatBroadcastPayload{
+		FromID:       client.PlayerID,
+		FromNickname: player.Nickname,
+		Message:      payload.Message,
+		Timestamp:    time.Now().UnixMilli(),
+	}
+
+	r.hub.BroadcastToPlayers(client.RoomCode, deadPlayerIDs, MustMessage(EventTypeGhostChatBroadcast, broadcastPayload))
+
+	r.logger.Debug("ghost chat sent",
+		"room", client.RoomCode,
+		"from", client.PlayerID,
+		"message_len", len(payload.Message),
+	)
 }
 
 // --- Voice handlers ---
