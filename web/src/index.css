@@ -1,0 +1,140 @@
+@import 'tailwindcss';
+
+/* ============================================
+   DESIGN TOKENS (CSS Variables)
+   ============================================ */
+
+:root {
+  /* Background Colors */
+  --color-bg-primary: #0d0d0f;
+  --color-bg-elevated: #1a1a1f;
+  --color-bg-surface: #252530;
+
+  /* Text Colors */
+  --color-text-primary: #e8e8ec;
+  --color-text-secondary: #9898a0;
+  --color-text-disabled: #5c5c66;
+
+  /* Accent Colors (de-saturated for dark mode) */
+  --color-accent-town: #6b9fe8;
+  --color-accent-mafia: #e86b6b;
+  --color-accent-neutral: #a088e8;
+  --color-accent-success: #6be898;
+  --color-accent-warning: #e8c56b;
+
+  /* Role Colors */
+  --color-role-villager: #6b9fe8;
+  --color-role-doctor: #6be898;
+  --color-role-detective: #a088e8;
+  --color-role-mafia: #e86b6b;
+  --color-role-godfather: #e8c56b;
+
+  /* Spacing */
+  --space-xs: 4px;
+  --space-sm: 8px;
+  --space-md: 16px;
+  --space-lg: 24px;
+  --space-xl: 32px;
+  --space-2xl: 48px;
+
+  /* Border Radius */
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-full: 9999px;
+
+  /* Typography */
+  --font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+
+  /* Font Sizes */
+  --font-size-micro: 12px;
+  --font-size-caption: 14px;
+  --font-size-body: 16px;
+  --font-size-headline: 18px;
+  --font-size-title: 24px;
+  --font-size-display: 32px;
+
+  /* Touch Targets */
+  --touch-target-min: 48px;
+  --touch-target-primary: 56px;
+}
+
+/* ============================================
+   BASE STYLES
+   ============================================ */
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  font-family: var(--font-family);
+  font-size: var(--font-size-body);
+  line-height: 1.5;
+  color: var(--color-text-primary);
+  background-color: var(--color-bg-primary);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  min-height: 100dvh; /* Dynamic viewport height for mobile */
+}
+
+#root {
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ============================================
+   UTILITY CLASSES (Tailwind Extensions)
+   ============================================ */
+
+@theme {
+  /* Colors - bg-*, text-* utilities */
+  --color-bg-primary: #0d0d0f;
+  --color-bg-elevated: #1a1a1f;
+  --color-bg-surface: #252530;
+
+  --color-text-primary: #e8e8ec;
+  --color-text-secondary: #9898a0;
+  --color-text-disabled: #5c5c66;
+
+  --color-accent-town: #6b9fe8;
+  --color-accent-mafia: #e86b6b;
+  --color-accent-neutral: #a088e8;
+  --color-accent-success: #6be898;
+  --color-accent-warning: #e8c56b;
+
+  --color-role-villager: #6b9fe8;
+  --color-role-doctor: #6be898;
+  --color-role-detective: #a088e8;
+  --color-role-mafia: #e86b6b;
+  --color-role-godfather: #e8c56b;
+
+  /* Spacing - using numeric scale to avoid conflicts with Tailwind's xs/sm/md/lg/xl */
+  --spacing-1: 4px;
+  --spacing-2: 8px;
+  --spacing-4: 16px;
+  --spacing-6: 24px;
+  --spacing-8: 32px;
+  --spacing-12: 48px;
+
+  /* Border Radius - using numeric scale */
+  --radius-2: 8px;
+  --radius-3: 12px;
+  --radius-4: 16px;
+  --radius-full: 9999px;
+
+  /* Font Sizes - text-* utilities */
+  --text-micro: 12px;
+  --text-caption: 14px;
+  --text-body: 16px;
+  --text-headline: 18px;
+  --text-title: 24px;
+  --text-display: 32px;
+}

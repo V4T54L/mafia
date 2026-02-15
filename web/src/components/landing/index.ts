@@ -1,0 +1,6 @@
+export { HeroSection } from './HeroSection'
+export { HowItWorksSection } from './HowItWorksSection'
+export { RolesSection } from './RolesSection'
+export { GameLoopSection } from './GameLoopSection'
+export { WhyMafiaSection } from './WhyMafiaSection'
+export { Footer } from './Footer'
