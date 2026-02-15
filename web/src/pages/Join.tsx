@@ -1,7 +1,9 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { Button } from '../components/ui'
+import { useWebSocket } from '../hooks/useWebSocket'
+import { useGameStore } from '../stores/gameStore'
 
 export function Join() {
   const { code: urlCode } = useParams()
@@ -13,6 +15,22 @@ export function Join() {
   const [isCreating, setIsCreating] = useState(!urlCode)
   const [error, setError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
+
+  const { connect, send, once, isConnected, connectionState } = useWebSocket()
+  const { roomCode: storeRoomCode, reset } = useGameStore()
+
+  // Connect to WebSocket on mount
+  useEffect(() => {
+    reset() // Clear any previous state
+    connect()
+  }, [connect, reset])
+
+  // Navigate to lobby when room is joined/created
+  useEffect(() => {
+    if (storeRoomCode) {
+      navigate(`/lobby/${storeRoomCode}`)
+    }
+  }, [storeRoomCode, navigate])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -28,26 +46,52 @@ export function Join() {
       return
     }
 
+    if (!isConnected) {
+      setError('Connecting to server...')
+      return
+    }
+
     setIsLoading(true)
 
-    // Simulate API call - will be replaced with real backend
-    await new Promise((resolve) => setTimeout(resolve, 800))
+    // Register error handler
+    once('error', (payload) => {
+      const { message } = payload as { code: string; message: string }
+      setError(message)
+      setIsLoading(false)
+    })
 
-    // Mock: navigate to lobby
-    const code = isCreating ? 'ABC123' : roomCode.toUpperCase()
-    navigate(`/lobby/${code}`)
+    if (isCreating) {
+      // Create room
+      send('create_room', {
+        nickname: nickname.trim(),
+        password: password || undefined,
+      })
+    } else {
+      // Join room
+      send('join_room', {
+        room_code: roomCode.toUpperCase(),
+        nickname: nickname.trim(),
+        password: password || undefined,
+      })
+    }
   }
 
   return (
     <div className="min-h-screen flex flex-col bg-bg-primary">
       {/* Header */}
-      <header className="p-4">
+      <header className="p-4 flex items-center justify-between">
         <button
           onClick={() => navigate('/')}
           className="text-text-secondary hover:text-text-primary transition-colors"
         >
           ← Back
         </button>
+        <div className="text-xs text-text-disabled">
+          {connectionState === 'connecting' && 'Connecting...'}
+          {connectionState === 'connected' && '● Connected'}
+          {connectionState === 'disconnected' && '○ Disconnected'}
+          {connectionState === 'error' && '✕ Error'}
+        </div>
       </header>
 
       {/* Main content */}
@@ -170,7 +214,7 @@ export function Join() {
               size="lg"
               fullWidth
               glow={!isCreating}
-              disabled={isLoading}
+              disabled={isLoading || !isConnected}
               className="mt-6"
             >
               {isLoading ? 'Loading...' : isCreating ? 'Create Room' : 'Join Room'}
@@ -180,7 +224,7 @@ export function Join() {
           {/* Info text */}
           <p className="text-center text-sm text-text-disabled mt-6">
             {isCreating
-              ? 'You\'ll get a code to share with friends'
+              ? "You'll get a code to share with friends"
               : 'Ask the host for the room code'}
           </p>
         </motion.div>

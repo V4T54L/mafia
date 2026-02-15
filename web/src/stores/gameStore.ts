@@ -45,10 +45,15 @@ export interface GameState {
   winner: Team | null
 
   // Actions
-  setRoomCode: (code: string) => void
+  setRoomCode: (code: string | null) => void
   setPlayerId: (id: string) => void
+  setConnected: (connected: boolean) => void
   setPlayers: (players: Player[]) => void
   setSettings: (settings: GameSettings) => void
+  setIsHost: (isHost: boolean) => void
+  addPlayer: (player: Player) => void
+  removePlayer: (playerId: string, newHostId?: string) => void
+  updatePlayerReady: (playerId: string, ready: boolean) => void
   setPhase: (phase: GamePhase) => void
   setMyRole: (role: Role) => void
   setPhaseTimer: (timer: number | null) => void
@@ -96,8 +101,23 @@ export const useGameStore = create<GameState>((set, get) => ({
   // Actions
   setRoomCode: (code) => set({ roomCode: code }),
   setPlayerId: (id) => set({ playerId: id }),
+  setConnected: (connected) => set({ isConnected: connected }),
   setPlayers: (players) => set({ players }),
   setSettings: (settings) => set({ settings }),
+  setIsHost: (isHost) => set({ isHost }),
+  addPlayer: (player) => set((state) => ({ players: [...state.players, player] })),
+  removePlayer: (playerId, newHostId) =>
+    set((state) => ({
+      players: state.players
+        .filter((p) => p.id !== playerId)
+        .map((p) => (newHostId && p.id === newHostId ? { ...p, isHost: true } : p)),
+      // If current player becomes host
+      isHost: newHostId === state.playerId ? true : state.isHost,
+    })),
+  updatePlayerReady: (playerId, ready) =>
+    set((state) => ({
+      players: state.players.map((p) => (p.id === playerId ? { ...p, isReady: ready } : p)),
+    })),
   setPhase: (phase) => set({ phase }),
   setMyRole: (role) => set({ myRole: role }),
   setPhaseTimer: (timer) => set({ phaseTimer: timer }),

@@ -1,18 +1,9 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { Button } from '../components/ui'
-import { mockPlayers, type Player, type GameSettings } from '../stores/gameStore'
-
-// Mock data for UI development
-const mockSettings: GameSettings = {
-  villagers: 3,
-  mafia: 2,
-  godfather: 0,
-  doctor: 1,
-  detective: 1,
-  nightTimer: 60,
-}
+import { useGameStore, type Player, type GameSettings } from '../stores/gameStore'
+import { useWebSocket } from '../hooks/useWebSocket'
 
 function PlayerCard({ player, isMe }: { player: Player; isMe: boolean }) {
   return (
@@ -149,31 +140,72 @@ export function Lobby() {
   const { code } = useParams()
   const navigate = useNavigate()
 
-  const [players] = useState<Player[]>(mockPlayers)
-  const [settings, setSettings] = useState<GameSettings>(mockSettings)
-  const [isReady, setIsReady] = useState(false)
+  const { connect, send, isConnected, connectionState } = useWebSocket()
+  const {
+    players,
+    settings,
+    playerId,
+    isHost,
+    roomCode,
+    reset,
+  } = useGameStore()
+
   const [copied, setCopied] = useState(false)
 
-  const myPlayerId = '1' // Mock: first player is "me"
-  const isHost = players.find((p) => p.id === myPlayerId)?.isHost || false
-  const allReady = players.every((p) => p.isReady)
+  // Connect to WebSocket on mount if not already connected
+  useEffect(() => {
+    if (!isConnected) {
+      connect()
+    }
+  }, [connect, isConnected])
+
+  // Redirect to join page if no room code (not in a room)
+  useEffect(() => {
+    if (isConnected && !roomCode) {
+      navigate(`/join/${code}`)
+    }
+  }, [isConnected, roomCode, code, navigate])
+
+  const me = players.find((p) => p.id === playerId)
+  const isReady = me?.isReady || false
+  const allReady = players.filter((p) => p.status === 'alive').every((p) => p.isReady)
   const readyCount = players.filter((p) => p.isReady).length
 
   const copyRoomCode = async () => {
-    if (code) {
-      await navigator.clipboard.writeText(code)
+    const roomCodeToCopy = roomCode || code
+    if (roomCodeToCopy) {
+      await navigator.clipboard.writeText(roomCodeToCopy)
       setCopied(true)
       setTimeout(() => setCopied(false), 2000)
     }
   }
 
+  const handleToggleReady = () => {
+    send('ready', { ready: !isReady })
+  }
+
+  const handleUpdateSettings = (newSettings: GameSettings) => {
+    send('update_settings', {
+      villagers: newSettings.villagers,
+      mafia: newSettings.mafia,
+      godfather: newSettings.godfather,
+      doctor: newSettings.doctor,
+      detective: newSettings.detective,
+      night_timer: newSettings.nightTimer,
+    })
+  }
+
   const handleStartGame = () => {
-    navigate(`/game/${code}`)
+    send('start_game', {})
   }
 
   const handleLeave = () => {
+    send('leave_room', {})
+    reset()
     navigate('/')
   }
+
+  const displayCode = roomCode || code
 
   return (
     <div className="min-h-screen flex flex-col bg-bg-primary">
@@ -191,11 +223,16 @@ export function Lobby() {
           onClick={copyRoomCode}
           className="flex items-center gap-2 px-3 py-1.5 bg-bg-surface rounded-lg hover:bg-bg-elevated transition-colors"
         >
-          <span className="font-mono text-lg text-text-primary">{code}</span>
+          <span className="font-mono text-lg text-text-primary">{displayCode}</span>
           <span className="text-xs text-text-secondary">{copied ? 'Copied!' : 'Copy'}</span>
         </button>
 
-        <div className="w-16" /> {/* Spacer for centering */}
+        <div className="text-xs text-text-disabled">
+          {connectionState === 'connecting' && 'Connecting...'}
+          {connectionState === 'connected' && '● Connected'}
+          {connectionState === 'disconnected' && '○ Disconnected'}
+          {connectionState === 'error' && '✕ Error'}
+        </div>
       </header>
 
       {/* Main content */}
@@ -219,7 +256,7 @@ export function Lobby() {
               Players ({players.length}/12)
             </h2>
             {players.map((player) => (
-              <PlayerCard key={player.id} player={player} isMe={player.id === myPlayerId} />
+              <PlayerCard key={player.id} player={player} isMe={player.id === playerId} />
             ))}
 
             {/* Empty slots */}
@@ -237,7 +274,7 @@ export function Lobby() {
           </div>
 
           {/* Settings */}
-          <SettingsPanel settings={settings} onChange={setSettings} disabled={!isHost} />
+          <SettingsPanel settings={settings} onChange={handleUpdateSettings} disabled={!isHost} />
         </div>
       </main>
 
@@ -260,7 +297,7 @@ export function Lobby() {
               variant={isReady ? 'secondary' : 'primary'}
               size="lg"
               fullWidth
-              onClick={() => setIsReady(!isReady)}
+              onClick={handleToggleReady}
             >
               {isReady ? 'Not Ready' : 'Ready Up'}
             </Button>
