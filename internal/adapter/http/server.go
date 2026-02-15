@@ -16,13 +16,15 @@ type Server struct {
 	router    *chi.Mux
 	logger    *slog.Logger
 	staticDir string
+	wsHandler http.Handler
 }
 
-func NewServer(logger *slog.Logger, staticDir string) *Server {
+func NewServer(logger *slog.Logger, staticDir string, wsHandler http.Handler) *Server {
 	s := &Server{
 		router:    chi.NewRouter(),
 		logger:    logger,
 		staticDir: staticDir,
+		wsHandler: wsHandler,
 	}
 	s.setupMiddleware()
 	s.setupRoutes()
@@ -49,6 +51,11 @@ func (s *Server) setupRoutes() {
 		r.Get("/health", s.handleHealth)
 	})
 
+	// WebSocket endpoint
+	if s.wsHandler != nil {
+		s.router.Handle("/ws", s.wsHandler)
+	}
+
 	// Serve static files (React build)
 	s.serveStaticFiles()
 }
@@ -70,7 +77,7 @@ func (s *Server) serveStaticFiles() {
 	// Serve static files
 	fileServer := http.FileServer(http.Dir(s.staticDir))
 
-	s.router.Get("/*", func(w http.ResponseWriter, r *http.Request) {
+	s.router.NotFound(func(w http.ResponseWriter, r *http.Request) {
 		path := filepath.Join(s.staticDir, r.URL.Path)
 
 		// Check if file exists
