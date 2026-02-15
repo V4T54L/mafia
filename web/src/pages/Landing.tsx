@@ -1,3 +1,4 @@
+import { motion } from 'framer-motion'
 import { Button } from '../components/ui'
 import { HeroSection } from '../components/landing/HeroSection'
 import { HowItWorksSection } from '../components/landing/HowItWorksSection'
@@ -16,12 +17,28 @@ export function Landing() {
       <WhyMafiaSection />
 
       {/* Final CTA */}
-      <section className="py-12 px-4 text-center bg-bg-primary">
-        <h2 className="text-title font-bold text-text-primary mb-6">Ready to find the Mafia?</h2>
-        <Button size="lg" className="mb-4">
-          Play Now
-        </Button>
-        <p className="text-caption text-text-secondary">Works best with 6-12 players</p>
+      <section className="py-20 px-4 text-center bg-bg-primary relative overflow-hidden">
+        {/* Subtle radial gradient */}
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--color-bg-elevated)_0%,_var(--color-bg-primary)_70%)] opacity-50" />
+
+        <motion.div
+          className="relative z-10"
+          initial={{ opacity: 0, y: 20 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.6 }}
+          viewport={{ once: true, margin: '-100px' }}
+        >
+          <h2 className="font-display text-4xl md:text-5xl text-text-primary mb-6 tracking-wide">
+            READY TO HUNT?
+          </h2>
+          <p className="text-lg text-text-secondary mb-8 max-w-sm mx-auto">
+            Gather your friends. Find the traitors. Trust no one.
+          </p>
+          <Button size="lg" variant="danger" glow className="mb-4">
+            Start Hunting
+          </Button>
+          <p className="text-sm text-text-disabled">Best with 6-12 players</p>
+        </motion.div>
       </section>
 
       <Footer />

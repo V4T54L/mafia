@@ -1,13 +1,14 @@
 import type { ButtonHTMLAttributes } from 'react'
 import { forwardRef } from 'react'
 
-type ButtonVariant = 'primary' | 'secondary' | 'ghost'
+type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger'
 type ButtonSize = 'sm' | 'md' | 'lg'
 
 interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: ButtonVariant
   size?: ButtonSize
   fullWidth?: boolean
+  glow?: boolean
 }
 
 const variantStyles: Record<ButtonVariant, string> = {
@@ -16,6 +17,8 @@ const variantStyles: Record<ButtonVariant, string> = {
   secondary:
     'bg-bg-surface text-text-primary border border-bg-surface hover:bg-bg-elevated active:bg-bg-primary',
   ghost: 'bg-transparent text-text-secondary hover:text-text-primary hover:bg-bg-surface',
+  danger:
+    'bg-accent-mafia text-text-primary hover:bg-accent-mafia/90 active:bg-accent-mafia/80',
 }
 
 const sizeStyles: Record<ButtonSize, string> = {
@@ -25,7 +28,7 @@ const sizeStyles: Record<ButtonSize, string> = {
 }
 
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
-  ({ variant = 'primary', size = 'md', fullWidth = false, className = '', ...props }, ref) => {
+  ({ variant = 'primary', size = 'md', fullWidth = false, glow = false, className = '', ...props }, ref) => {
     return (
       <button
         ref={ref}
@@ -38,6 +41,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
           ${variantStyles[variant]}
           ${sizeStyles[size]}
           ${fullWidth ? 'w-full' : ''}
+          ${glow ? 'glow-mafia-pulse' : ''}
           ${className}
         `}
         {...props}

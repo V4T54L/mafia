@@ -1,3 +1,5 @@
+import { motion } from 'framer-motion'
+
 const features = [
   {
     icon: '🎙️',
@@ -8,42 +10,73 @@ const features = [
   {
     icon: '⚡',
     title: 'Zero Setup',
-    description: 'No accounts. No downloads. No Discord. Share a code, start playing in seconds.',
+    description: "Skip the \"everyone download this app\" chaos. Share a link. That's it.",
   },
   {
     icon: '🤖',
     title: 'Auto-Moderated',
-    description:
-      'No human moderator needed. The game handles roles, timers, and rules. Everyone gets to play.',
+    description: 'No one sits out to run the game. The app handles it. Everyone plays. Everyone lies.',
   },
   {
     icon: '👻',
     title: 'Fair for the Dead',
     description:
-      "Dead players listen but can't speak. No accidental leaks. No cheating. Just ghostly observation.",
+      "Die early? You're a ghost now. Listen to your friends blame each other. You can't help. It's beautiful.",
   },
 ]
 
+const containerVariants = {
+  hidden: { opacity: 0 },
+  show: {
+    opacity: 1,
+    transition: {
+      staggerChildren: 0.1,
+    },
+  },
+}
+
+const itemVariants = {
+  hidden: { opacity: 0, x: -20 },
+  show: { opacity: 1, x: 0, transition: { duration: 0.5, ease: 'easeOut' as const } },
+}
+
 export function WhyMafiaSection() {
   return (
-    <section className="py-12 px-4 bg-bg-primary">
-      <h2 className="text-title font-bold text-center text-text-primary mb-8">Why Mafia?</h2>
+    <section className="py-20 px-4 bg-bg-primary">
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        whileInView={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.6 }}
+        viewport={{ once: true, margin: '-100px' }}
+      >
+        <h2 className="font-display text-4xl md:text-5xl text-center text-text-primary mb-12 tracking-wide">
+          WHY MAFIA?
+        </h2>
+      </motion.div>
 
-      <div className="flex flex-col gap-4 max-w-md mx-auto">
+      <motion.div
+        className="flex flex-col gap-4 max-w-md mx-auto"
+        variants={containerVariants}
+        initial="hidden"
+        whileInView="show"
+        viewport={{ once: true, margin: '-50px' }}
+      >
         {features.map((feature) => (
-          <div key={feature.title} className="bg-bg-surface rounded-xl p-6">
+          <motion.div
+            key={feature.title}
+            variants={itemVariants}
+            className="bg-bg-surface rounded-2xl p-5 hover:bg-bg-elevated transition-colors duration-300"
+          >
             <div className="flex items-start gap-4">
-              <span className="text-headline flex-shrink-0">{feature.icon}</span>
+              <span className="text-2xl flex-shrink-0 mt-1">{feature.icon}</span>
               <div>
-                <h3 className="text-headline font-semibold text-text-primary mb-1">
-                  {feature.title}
-                </h3>
-                <p className="text-body text-text-secondary">{feature.description}</p>
+                <h3 className="text-lg font-semibold text-text-primary mb-1">{feature.title}</h3>
+                <p className="text-body text-text-secondary leading-relaxed">{feature.description}</p>
               </div>
             </div>
-          </div>
+          </motion.div>
         ))}
-      </div>
+      </motion.div>
     </section>
   )
 }

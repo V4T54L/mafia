@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { motion, AnimatePresence } from 'framer-motion'
 
 interface Role {
   id: string
@@ -17,7 +18,7 @@ const roles: Role[] = [
     icon: '👤',
     shortDesc: 'Find the Mafia',
     fullDesc:
-      'An ordinary citizen. No special powers, but your voice matters. Find the Mafia through discussion and deduction.',
+      'No powers. Just your instincts. Listen closely, ask the right questions, and pray you trust the right people.',
   },
   {
     id: 'mafia',
@@ -26,7 +27,7 @@ const roles: Role[] = [
     icon: '💀',
     shortDesc: 'Eliminate the Town',
     fullDesc:
-      'You know who your partners are. Each night, choose someone to eliminate. Blend in during the day.',
+      'You know your partners. They know you. Every night, choose someone to silence. Every day, act innocent.',
   },
   {
     id: 'detective',
@@ -35,7 +36,7 @@ const roles: Role[] = [
     icon: '🔍',
     shortDesc: 'Investigate players',
     fullDesc:
-      "Each night, investigate one player. Learn if they're Mafia... but can you share your findings without becoming a target?",
+      'Each night, learn one truth. But sharing it makes you a target. How do you reveal what you know without dying for it?',
   },
   {
     id: 'doctor',
@@ -44,7 +45,7 @@ const roles: Role[] = [
     icon: '💊',
     shortDesc: 'Protect the innocent',
     fullDesc:
-      'Each night, protect one player from elimination. Choose wisely—you might save a life, or waste your power.',
+      'One save per night. Choose wrong, and someone dies. Choose right, and you might just turn the game.',
   },
   {
     id: 'godfather',
@@ -53,9 +54,24 @@ const roles: Role[] = [
     icon: '🎩',
     shortDesc: 'The hidden boss',
     fullDesc:
-      'The boss. You appear innocent to the Detective... the first time. Use your cover wisely.',
+      "The Detective checks you? You're clean. The first time. After that, your cover is blown. Use your one free pass wisely.",
   },
 ]
+
+const containerVariants = {
+  hidden: { opacity: 0 },
+  show: {
+    opacity: 1,
+    transition: {
+      staggerChildren: 0.08,
+    },
+  },
+}
+
+const itemVariants = {
+  hidden: { opacity: 0, scale: 0.9 },
+  show: { opacity: 1, scale: 1, transition: { duration: 0.4, ease: 'easeOut' as const } },
+}
 
 export function RolesSection() {
   const [expandedRole, setExpandedRole] = useState<string | null>(null)
@@ -65,60 +81,101 @@ export function RolesSection() {
   }
 
   return (
-    <section className="py-12 px-4 bg-bg-primary">
-      <h2 className="text-title font-bold text-center text-text-primary mb-8">The Roles</h2>
+    <section className="py-20 px-4 bg-bg-primary">
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        whileInView={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.6 }}
+        viewport={{ once: true, margin: '-100px' }}
+      >
+        <h2 className="font-display text-4xl md:text-5xl text-center text-text-primary mb-12 tracking-wide">
+          THE ROLES
+        </h2>
+      </motion.div>
 
-      <div className="grid grid-cols-2 gap-4 max-w-md mx-auto sm:grid-cols-3">
+      <motion.div
+        className="grid grid-cols-2 gap-3 max-w-md mx-auto sm:grid-cols-3"
+        variants={containerVariants}
+        initial="hidden"
+        whileInView="show"
+        viewport={{ once: true, margin: '-50px' }}
+      >
         {roles.map((role) => (
-          <button
+          <motion.button
             key={role.id}
+            variants={itemVariants}
             onClick={() => toggleRole(role.id)}
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.98 }}
             className={`
-              p-4 rounded-xl text-center transition-all duration-200 cursor-pointer
+              p-4 rounded-2xl text-center transition-colors duration-200 cursor-pointer
               ${
                 role.team === 'town'
-                  ? 'bg-accent-town/10 border border-accent-town/30'
-                  : 'bg-accent-mafia/10 border border-accent-mafia/30'
+                  ? 'bg-accent-town/10 border border-accent-town/30 hover:bg-accent-town/20'
+                  : 'bg-accent-mafia/10 border border-accent-mafia/30 hover:bg-accent-mafia/20'
               }
-              ${expandedRole === role.id ? 'ring-2 ring-accent-neutral' : ''}
-              hover:scale-105
+              ${expandedRole === role.id ? 'ring-2 ring-accent-neutral ring-offset-2 ring-offset-bg-primary' : ''}
             `}
           >
-            <div className="text-display mb-1">{role.icon}</div>
-            <div className="text-caption font-semibold text-text-primary">{role.name}</div>
+            <div className="text-4xl mb-2">{role.icon}</div>
+            <div className="text-sm font-semibold text-text-primary">{role.name}</div>
             <div
-              className={`text-micro ${role.team === 'town' ? 'text-accent-town' : 'text-accent-mafia'}`}
+              className={`text-xs mt-1 ${role.team === 'town' ? 'text-accent-town' : 'text-accent-mafia'}`}
             >
               {role.team === 'town' ? 'Town' : 'Mafia'}
             </div>
-          </button>
+          </motion.button>
         ))}
-      </div>
+      </motion.div>
 
       {/* Expanded role description */}
-      {expandedRole && (
-        <div className="mt-6 max-w-md mx-auto">
-          {roles
-            .filter((r) => r.id === expandedRole)
-            .map((role) => (
-              <div
-                key={role.id}
-                className={`
-                  p-6 rounded-xl
-                  ${role.team === 'town' ? 'bg-accent-town/10' : 'bg-accent-mafia/10'}
-                `}
-              >
-                <div className="flex items-center gap-2 mb-2">
-                  <span className="text-headline">{role.icon}</span>
-                  <h3 className="text-headline font-semibold text-text-primary">{role.name}</h3>
+      <AnimatePresence mode="wait">
+        {expandedRole && (
+          <motion.div
+            key={expandedRole}
+            className="mt-6 max-w-md mx-auto"
+            initial={{ opacity: 0, y: -10, height: 0 }}
+            animate={{ opacity: 1, y: 0, height: 'auto' }}
+            exit={{ opacity: 0, y: -10, height: 0 }}
+            transition={{ duration: 0.3, ease: 'easeOut' }}
+          >
+            {roles
+              .filter((r) => r.id === expandedRole)
+              .map((role) => (
+                <div
+                  key={role.id}
+                  className={`
+                    p-5 rounded-2xl
+                    ${role.team === 'town' ? 'bg-accent-town/10 border border-accent-town/20' : 'bg-accent-mafia/10 border border-accent-mafia/20'}
+                  `}
+                >
+                  <div className="flex items-center gap-3 mb-3">
+                    <span className="text-3xl">{role.icon}</span>
+                    <div>
+                      <h3 className="text-lg font-semibold text-text-primary">{role.name}</h3>
+                      <span
+                        className={`text-xs ${role.team === 'town' ? 'text-accent-town' : 'text-accent-mafia'}`}
+                      >
+                        {role.team === 'town' ? 'Town' : 'Mafia'}
+                      </span>
+                    </div>
+                  </div>
+                  <p className="text-body text-text-secondary leading-relaxed">{role.fullDesc}</p>
                 </div>
-                <p className="text-body text-text-secondary">{role.fullDesc}</p>
-              </div>
-            ))}
-        </div>
-      )}
+              ))}
+          </motion.div>
+        )}
+      </AnimatePresence>
 
-      <p className="text-center text-caption text-text-disabled mt-6">Tap a role to learn more</p>
+      <motion.p
+        className="text-center text-sm text-text-disabled mt-8"
+        initial={{ opacity: 0 }}
+        whileInView={{ opacity: 1 }}
+        transition={{ delay: 0.3, duration: 0.5 }}
+        viewport={{ once: true }}
+      >
+        Tap a role to learn more
+      </motion.p>
     </section>
   )
 }
