@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { Button } from '../components/ui'
 import { VoiceControls } from '../components/VoiceControls'
 import { GhostChat } from '../components/GhostChat'
+import { VoteDetailModal } from '../components/VoteDetailModal'
 import { useGameStore } from '../stores/gameStore'
 import { useWebSocket } from '../contexts/WebSocketContext'
 import type { Role, Player, Team } from '../stores/gameStore'
@@ -119,6 +120,7 @@ function PlayerCard({
   onSelect,
   showRole,
   votedBy,
+  onVoteCountClick,
 }: {
   player: Player
   isMe: boolean
@@ -127,6 +129,7 @@ function PlayerCard({
   onSelect?: () => void
   showRole?: boolean
   votedBy?: number
+  onVoteCountClick?: () => void
 }) {
   const isDead = player.status === 'dead'
   const isDisconnected = player.isConnected === false
@@ -177,11 +180,17 @@ function PlayerCard({
         {isDisconnected && !isDead && <span className="text-sm text-accent-warning">Reconnecting...</span>}
       </div>
 
-      {/* Vote count */}
+      {/* Vote count - clickable to see voters */}
       {votedBy !== undefined && votedBy > 0 && (
-        <div className="w-8 h-8 rounded-full bg-accent-mafia/20 flex items-center justify-center">
+        <button
+          onClick={(e) => {
+            e.stopPropagation()
+            onVoteCountClick?.()
+          }}
+          className="w-8 h-8 rounded-full bg-accent-mafia/20 flex items-center justify-center hover:bg-accent-mafia/30 transition-colors"
+        >
           <span className="text-accent-mafia font-bold text-sm">{votedBy}</span>
-        </div>
+        </button>
       )}
 
       {/* Selection indicator */}
@@ -369,16 +378,21 @@ function DayPhase({
   players,
   timer,
   voteCounts,
+  voteMap,
+  submittedVoters,
   onVote,
 }: {
   myId: string
   players: Player[]
   timer: number | null
   voteCounts: Record<string, number>
+  voteMap: Record<string, string>
+  submittedVoters: string[]
   onVote: (targetId: string | null) => void
 }) {
   const [selectedVote, setSelectedVote] = useState<string | null>(null)
   const [hasVoted, setHasVoted] = useState(false)
+  const [modalPlayer, setModalPlayer] = useState<Player | null>(null)
 
   const alivePlayers = players.filter((p) => p.status === 'alive')
   const amIDead = players.find((p) => p.id === myId)?.status === 'dead'
@@ -386,6 +400,23 @@ function DayPhase({
   const handleSubmitVote = () => {
     onVote(selectedVote)
     setHasVoted(true)
+  }
+
+  // Get voters for a specific target
+  const getVotersFor = (targetId: string) => {
+    const voters: Array<{ player: Player; isSubmitted: boolean }> = []
+    for (const [voterId, target] of Object.entries(voteMap)) {
+      if (target === targetId) {
+        const player = players.find((p) => p.id === voterId)
+        if (player) {
+          voters.push({
+            player,
+            isSubmitted: submittedVoters.includes(voterId),
+          })
+        }
+      }
+    }
+    return voters
   }
 
   return (
@@ -423,9 +454,18 @@ function DayPhase({
               isSelected={selectedVote === player.id}
               onSelect={() => setSelectedVote(player.id)}
               votedBy={voteCounts[player.id]}
+              onVoteCountClick={() => setModalPlayer(player)}
             />
           ))}
         </div>
+
+        {/* Vote Detail Modal */}
+        <VoteDetailModal
+          isOpen={modalPlayer !== null}
+          onClose={() => setModalPlayer(null)}
+          targetPlayer={modalPlayer}
+          voters={modalPlayer ? getVotersFor(modalPlayer.id) : []}
+        />
 
         {/* Skip vote option */}
         {!hasVoted && !amIDead && (
@@ -582,6 +622,8 @@ export function Game() {
     players,
     phaseTimer,
     voteCounts,
+    voteMap,
+    submittedVoters,
     nightResult,
     dayResult,
     winner,
@@ -672,6 +714,8 @@ export function Game() {
           players={players}
           timer={phaseTimer}
           voteCounts={voteCounts}
+          voteMap={voteMap}
+          submittedVoters={submittedVoters}
           onVote={handleDayVote}
         />
       )}

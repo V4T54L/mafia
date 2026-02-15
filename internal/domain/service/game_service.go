@@ -298,12 +298,14 @@ func (s *GameService) SubmitDayVote(roomCode, voterID, targetID string) error {
 		"target", targetID,
 	)
 
-	// Broadcast vote update
+	// Broadcast vote update with detailed vote information
+	votes, submitted := game.GetVoteDetails()
 	s.emitEvent(GameEvent{
 		Type:     EventVoteUpdate,
 		RoomCode: roomCode,
 		Data: map[string]any{
-			"votes": game.GetVoteCounts(),
+			"votes":     votes,     // voter ID -> target ID
+			"submitted": submitted, // list of voter IDs who have finalized
 		},
 	})
 

@@ -78,7 +78,9 @@ export interface GameState {
   phaseTimer: number | null
   nightTarget: string | null
   dayVote: string | null
-  voteCounts: Record<string, number>
+  voteMap: Record<string, string>      // voter ID -> target ID
+  submittedVoters: string[]            // voter IDs who have finalized
+  voteCounts: Record<string, number>   // computed from voteMap
   nightResult: NightResult | null
   dayResult: DayResult | null
   winner: Team | null
@@ -104,6 +106,7 @@ export interface GameState {
   setPhaseTimer: (timer: number | null) => void
   setNightTarget: (targetId: string | null) => void
   setDayVote: (targetId: string | null) => void
+  setVoteDetails: (votes: Record<string, string>, submitted: string[]) => void
   setVoteCounts: (counts: Record<string, number>) => void
   setNightResult: (result: NightResult | null) => void
   setDayResult: (result: DayResult | null) => void
@@ -149,6 +152,8 @@ export const useGameStore = create<GameState>((set, get) => ({
   phaseTimer: null,
   nightTarget: null,
   dayVote: null,
+  voteMap: {},
+  submittedVoters: [],
   voteCounts: {},
   nightResult: null,
   dayResult: null,
@@ -191,12 +196,22 @@ export const useGameStore = create<GameState>((set, get) => ({
     set((state) => ({
       players: state.players.map((p) => (p.id === playerId ? { ...p, isConnected: connected } : p)),
     })),
-  setPhase: (phase) => set({ phase, nightTarget: null, dayVote: null }),
+  setPhase: (phase) => set({ phase, nightTarget: null, dayVote: null, voteMap: {}, submittedVoters: [], voteCounts: {} }),
   setRound: (round) => set({ round }),
   setMyRole: (role, team, teammates) => set({ myRole: role, myTeam: team, teammates: teammates || [] }),
   setPhaseTimer: (timer) => set({ phaseTimer: timer }),
   setNightTarget: (targetId) => set({ nightTarget: targetId }),
   setDayVote: (targetId) => set({ dayVote: targetId }),
+  setVoteDetails: (votes, submitted) => {
+    // Compute vote counts from the vote map
+    const counts: Record<string, number> = {}
+    for (const targetId of Object.values(votes)) {
+      if (targetId) {
+        counts[targetId] = (counts[targetId] || 0) + 1
+      }
+    }
+    set({ voteMap: votes, submittedVoters: submitted, voteCounts: counts })
+  },
   setVoteCounts: (counts) => set({ voteCounts: counts }),
   setNightResult: (result) => set({ nightResult: result }),
   setDayResult: (result) => set({ dayResult: result }),
@@ -230,6 +245,8 @@ export const useGameStore = create<GameState>((set, get) => ({
       phaseTimer: null,
       nightTarget: null,
       dayVote: null,
+      voteMap: {},
+      submittedVoters: [],
       voteCounts: {},
       nightResult: null,
       dayResult: null,

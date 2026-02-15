@@ -54,7 +54,7 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
     setRound,
     setMyRole,
     setPhaseTimer,
-    setVoteCounts,
+    setVoteDetails,
     setNightResult,
     setDayResult,
     setWinner,
@@ -343,7 +343,7 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
           // Clear previous results when starting new phase
           setNightResult(null)
           setDayResult(null)
-          setVoteCounts({})
+          setVoteDetails({}, [])
           break
         }
 
@@ -387,8 +387,11 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
         }
 
         case 'vote_update': {
-          const { votes } = message.payload as { votes: Record<string, number> }
-          setVoteCounts(votes)
+          const { votes, submitted } = message.payload as {
+            votes: Record<string, string>
+            submitted: string[]
+          }
+          setVoteDetails(votes, submitted)
           break
         }
 
@@ -489,7 +492,7 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
     } catch (err) {
       console.error('[WS] Failed to handle message:', err)
     }
-  }, [setPlayerId, setConnected, setRoomCode, setIsHost, setPlayers, setSettings, addPlayer, removePlayer, updatePlayerReady, updatePlayerStatus, updatePlayerSpeaking, updatePlayerConnected, setPhase, setRound, setMyRole, setPhaseTimer, setVoteCounts, setNightResult, setDayResult, setWinner, addGhostMessage])
+  }, [setPlayerId, setConnected, setRoomCode, setIsHost, setPlayers, setSettings, addPlayer, removePlayer, updatePlayerReady, updatePlayerStatus, updatePlayerSpeaking, updatePlayerConnected, setPhase, setRound, setMyRole, setPhaseTimer, setVoteDetails, setNightResult, setDayResult, setWinner, addGhostMessage])
 
   // Handle incoming messages (may be batched with newlines)
   const handleMessage = useCallback((event: MessageEvent) => {

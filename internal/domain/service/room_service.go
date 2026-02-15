@@ -14,6 +14,8 @@ import (
 const (
 	// ReconnectTimeout is how long a player has to reconnect after disconnecting
 	ReconnectTimeout = 60 * time.Second
+	// RoomTTL is how long an empty room persists before deletion
+	RoomTTL = 5 * time.Minute
 )
 
 // DisconnectedPlayer tracks a disconnected player awaiting reconnection
@@ -28,6 +30,7 @@ type DisconnectedPlayer struct {
 type RoomService struct {
 	rooms        map[string]*entity.Room           // keyed by room code
 	disconnected map[string]*DisconnectedPlayer    // keyed by player ID
+	roomTTL      map[string]*time.Timer            // keyed by room code, TTL cleanup timers
 	mu           sync.RWMutex
 	logger       *slog.Logger
 
@@ -40,6 +43,7 @@ func NewRoomService(logger *slog.Logger) *RoomService {
 	return &RoomService{
 		rooms:        make(map[string]*entity.Room),
 		disconnected: make(map[string]*DisconnectedPlayer),
+		roomTTL:      make(map[string]*time.Timer),
 		logger:       logger,
 	}
 }
@@ -102,6 +106,9 @@ func (s *RoomService) JoinRoom(code, password, playerID, nickname string) (*enti
 		}
 	}
 
+	// Cancel any pending TTL timer
+	s.cancelRoomTTL(code)
+
 	// Create player and add to room
 	player := entity.NewPlayer(playerID, nickname, false)
 	if err := room.AddPlayer(player); err != nil {
@@ -138,9 +145,9 @@ func (s *RoomService) LeaveRoom(code, playerID string) (*entity.Player, string, 
 		"player_count", room.PlayerCount(),
 	)
 
-	// Clean up empty rooms
+	// Start TTL timer for empty rooms
 	if room.IsEmpty() {
-		s.DeleteRoom(code)
+		s.startRoomTTL(code)
 	}
 
 	return player, newHostID, nil
@@ -182,8 +189,53 @@ func (s *RoomService) DeleteRoom(code string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	// Cancel TTL timer if exists
+	if timer, ok := s.roomTTL[code]; ok {
+		timer.Stop()
+		delete(s.roomTTL, code)
+	}
+
 	delete(s.rooms, code)
 	s.logger.Info("room deleted", "code", code)
+}
+
+// startRoomTTL starts a cleanup timer for an empty room
+func (s *RoomService) startRoomTTL(code string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	// Cancel existing timer if any
+	if timer, ok := s.roomTTL[code]; ok {
+		timer.Stop()
+	}
+
+	s.logger.Info("room TTL started", "code", code, "ttl", RoomTTL)
+
+	s.roomTTL[code] = time.AfterFunc(RoomTTL, func() {
+		s.mu.Lock()
+		room, exists := s.rooms[code]
+		if exists && room.IsEmpty() {
+			delete(s.rooms, code)
+			delete(s.roomTTL, code)
+			s.logger.Info("room expired and deleted", "code", code)
+		} else {
+			// Room has players now, just clean up timer reference
+			delete(s.roomTTL, code)
+		}
+		s.mu.Unlock()
+	})
+}
+
+// cancelRoomTTL cancels a pending room cleanup timer
+func (s *RoomService) cancelRoomTTL(code string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if timer, ok := s.roomTTL[code]; ok {
+		timer.Stop()
+		delete(s.roomTTL, code)
+		s.logger.Debug("room TTL cancelled", "code", code)
+	}
 }
 
 // RoomCount returns the number of active rooms

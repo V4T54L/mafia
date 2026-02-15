@@ -40,8 +40,9 @@ type NightActions struct {
 
 // DayVotes holds the votes during the day phase
 type DayVotes struct {
-	Votes     map[string]string // voter ID -> target ID (empty = skip)
-	VotedTime map[string]time.Time
+	Votes     map[string]string    // voter ID -> target ID (empty = skip)
+	VotedTime map[string]time.Time // when each vote was cast
+	Submitted map[string]bool      // voter ID -> true if vote is finalized
 }
 
 // NightResult contains the outcome of the night phase
@@ -333,6 +334,7 @@ func (g *Game) StartDay(duration time.Duration) {
 	g.DayVotes = &DayVotes{
 		Votes:     make(map[string]string),
 		VotedTime: make(map[string]time.Time),
+		Submitted: make(map[string]bool),
 	}
 }
 
@@ -369,6 +371,7 @@ func (g *Game) SubmitDayVote(voterID, targetID string) error {
 
 	g.DayVotes.Votes[voterID] = targetID
 	g.DayVotes.VotedTime[voterID] = time.Now()
+	g.DayVotes.Submitted[voterID] = true
 
 	return nil
 }
@@ -563,6 +566,33 @@ func (g *Game) GetVoteCounts() map[string]int {
 		}
 	}
 	return counts
+}
+
+// GetVoteDetails returns detailed vote information (who voted for whom)
+func (g *Game) GetVoteDetails() (map[string]string, []string) {
+	g.mu.RLock()
+	defer g.mu.RUnlock()
+
+	votes := make(map[string]string)
+	submitted := make([]string, 0)
+
+	if g.DayVotes == nil {
+		return votes, submitted
+	}
+
+	// Copy votes map
+	for voterID, targetID := range g.DayVotes.Votes {
+		votes[voterID] = targetID
+	}
+
+	// Get submitted voters
+	for voterID, isSubmitted := range g.DayVotes.Submitted {
+		if isSubmitted {
+			submitted = append(submitted, voterID)
+		}
+	}
+
+	return votes, submitted
 }
 
 // GetRoleRevealData returns data for each player's role reveal
