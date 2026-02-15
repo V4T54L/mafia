@@ -49,6 +49,7 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
     updatePlayerReady,
     updatePlayerStatus,
     updatePlayerSpeaking,
+    updatePlayerConnected,
     setPhase,
     setRound,
     setMyRole,
@@ -138,6 +139,7 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
               nickname: string
               is_host: boolean
               is_ready: boolean
+              is_connected: boolean
               status: string
             }>
             settings: {
@@ -156,6 +158,7 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
               nickname: p.nickname,
               isHost: p.is_host,
               isReady: p.is_ready,
+              isConnected: p.is_connected ?? true,
               status: p.status as 'alive' | 'dead',
             }))
           )
@@ -183,6 +186,7 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
               nickname: string
               is_host: boolean
               is_ready: boolean
+              is_connected: boolean
               status: string
             }>
             settings: {
@@ -200,6 +204,7 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
               nickname: p.nickname,
               isHost: p.is_host,
               isReady: p.is_ready,
+              isConnected: p.is_connected ?? true,
               status: p.status as 'alive' | 'dead',
             }))
           )
@@ -221,6 +226,7 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
               nickname: string
               is_host: boolean
               is_ready: boolean
+              is_connected: boolean
               status: string
             }
           }
@@ -229,6 +235,7 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
             nickname: player.nickname,
             isHost: player.is_host,
             isReady: player.is_ready,
+            isConnected: player.is_connected ?? true,
             status: player.status as 'alive' | 'dead',
           })
           break
@@ -240,6 +247,18 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
             new_host?: string
           }
           removePlayer(player_id, new_host)
+          break
+        }
+
+        case 'player_disconnected': {
+          const { player_id } = message.payload as { player_id: string }
+          updatePlayerConnected(player_id, false)
+          break
+        }
+
+        case 'player_reconnected': {
+          const { player_id } = message.payload as { player_id: string }
+          updatePlayerConnected(player_id, true)
           break
         }
 
@@ -406,6 +425,7 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
               nickname: string
               role: string
               status: string
+              is_connected?: boolean
             }>
           }
 
@@ -416,6 +436,7 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
               nickname: p.nickname,
               isHost: false,
               isReady: false,
+              isConnected: p.is_connected ?? true,
               status: p.status as 'alive' | 'dead',
               role: p.role as 'villager' | 'mafia' | 'godfather' | 'doctor' | 'detective',
             }))
@@ -468,7 +489,7 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
     } catch (err) {
       console.error('[WS] Failed to handle message:', err)
     }
-  }, [setPlayerId, setConnected, setRoomCode, setIsHost, setPlayers, setSettings, addPlayer, removePlayer, updatePlayerReady, updatePlayerStatus, updatePlayerSpeaking, setPhase, setRound, setMyRole, setPhaseTimer, setVoteCounts, setNightResult, setDayResult, setWinner, addGhostMessage])
+  }, [setPlayerId, setConnected, setRoomCode, setIsHost, setPlayers, setSettings, addPlayer, removePlayer, updatePlayerReady, updatePlayerStatus, updatePlayerSpeaking, updatePlayerConnected, setPhase, setRound, setMyRole, setPhaseTimer, setVoteCounts, setNightResult, setDayResult, setWinner, addGhostMessage])
 
   // Handle incoming messages (may be batched with newlines)
   const handleMessage = useCallback((event: MessageEvent) => {
@@ -502,6 +523,13 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
     ws.onopen = () => {
       console.log('[WS] Connected')
       setConnectionState('connected')
+
+      // If we were in a game, attempt to reconnect
+      const { roomCode, phase } = useGameStore.getState()
+      if (roomCode && phase !== 'lobby') {
+        console.log('[WS] Attempting game reconnection...')
+        ws.send(JSON.stringify({ type: 'reconnect' }))
+      }
     }
 
     ws.onmessage = handleMessage

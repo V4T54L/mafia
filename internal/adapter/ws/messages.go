@@ -8,6 +8,7 @@ const (
 	MsgTypeCreateRoom = "create_room"
 	MsgTypeJoinRoom   = "join_room"
 	MsgTypeLeaveRoom  = "leave_room"
+	MsgTypeReconnect  = "reconnect"
 
 	// Lobby actions
 	MsgTypeReady          = "ready"
@@ -37,8 +38,10 @@ const (
 	// Room events
 	EventTypeRoomCreated  = "room_created"
 	EventTypeRoomJoined   = "room_joined"
-	EventTypePlayerJoined = "player_joined"
-	EventTypePlayerLeft   = "player_left"
+	EventTypePlayerJoined       = "player_joined"
+	EventTypePlayerLeft         = "player_left"
+	EventTypePlayerDisconnected = "player_disconnected"
+	EventTypePlayerReconnected  = "player_reconnected"
 
 	// Lobby events
 	EventTypePlayerReady     = "player_ready"
@@ -193,11 +196,12 @@ type RoomJoinedPayload struct {
 
 // PlayerDTO is a player representation for clients
 type PlayerDTO struct {
-	ID       string `json:"id"`
-	Nickname string `json:"nickname"`
-	IsHost   bool   `json:"is_host"`
-	IsReady  bool   `json:"is_ready"`
-	Status   string `json:"status"` // "alive", "dead"
+	ID          string `json:"id"`
+	Nickname    string `json:"nickname"`
+	IsHost      bool   `json:"is_host"`
+	IsReady     bool   `json:"is_ready"`
+	IsConnected bool   `json:"is_connected"`
+	Status      string `json:"status"` // "alive", "dead"
 }
 
 // PlayerJoinedPayload is sent when another player joins

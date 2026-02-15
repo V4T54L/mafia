@@ -11,6 +11,7 @@ export interface Player {
   nickname: string
   isHost: boolean
   isReady: boolean
+  isConnected: boolean
   status: PlayerStatus
   role?: Role
   isSpeaking?: boolean
@@ -96,6 +97,7 @@ export interface GameState {
   updatePlayerStatus: (playerId: string, status: PlayerStatus) => void
   updatePlayerRole: (playerId: string, role: Role) => void
   updatePlayerSpeaking: (playerId: string, speaking: boolean) => void
+  updatePlayerConnected: (playerId: string, connected: boolean) => void
   setPhase: (phase: GamePhase) => void
   setRound: (round: number) => void
   setMyRole: (role: Role, team: Team, teammates?: Teammate[]) => void
@@ -123,12 +125,12 @@ const defaultSettings: GameSettings = {
 
 // Mock players for UI development
 export const mockPlayers: Player[] = [
-  { id: '1', nickname: 'Alice', isHost: true, isReady: true, status: 'alive', isSpeaking: false },
-  { id: '2', nickname: 'Bob', isHost: false, isReady: true, status: 'alive', isSpeaking: true },
-  { id: '3', nickname: 'Charlie', isHost: false, isReady: false, status: 'alive', isSpeaking: false },
-  { id: '4', nickname: 'Diana', isHost: false, isReady: true, status: 'alive', isSpeaking: false },
-  { id: '5', nickname: 'Eve', isHost: false, isReady: true, status: 'dead', isSpeaking: false },
-  { id: '6', nickname: 'Frank', isHost: false, isReady: false, status: 'alive', isSpeaking: false },
+  { id: '1', nickname: 'Alice', isHost: true, isReady: true, isConnected: true, status: 'alive', isSpeaking: false },
+  { id: '2', nickname: 'Bob', isHost: false, isReady: true, isConnected: true, status: 'alive', isSpeaking: true },
+  { id: '3', nickname: 'Charlie', isHost: false, isReady: false, isConnected: true, status: 'alive', isSpeaking: false },
+  { id: '4', nickname: 'Diana', isHost: false, isReady: true, isConnected: false, status: 'alive', isSpeaking: false },
+  { id: '5', nickname: 'Eve', isHost: false, isReady: true, isConnected: true, status: 'dead', isSpeaking: false },
+  { id: '6', nickname: 'Frank', isHost: false, isReady: false, isConnected: true, status: 'alive', isSpeaking: false },
 ]
 
 export const useGameStore = create<GameState>((set, get) => ({
@@ -184,6 +186,10 @@ export const useGameStore = create<GameState>((set, get) => ({
   updatePlayerSpeaking: (playerId, speaking) =>
     set((state) => ({
       players: state.players.map((p) => (p.id === playerId ? { ...p, isSpeaking: speaking } : p)),
+    })),
+  updatePlayerConnected: (playerId, connected) =>
+    set((state) => ({
+      players: state.players.map((p) => (p.id === playerId ? { ...p, isConnected: connected } : p)),
     })),
   setPhase: (phase) => set({ phase, nightTarget: null, dayVote: null }),
   setRound: (round) => set({ round }),

@@ -129,6 +129,7 @@ function PlayerCard({
   votedBy?: number
 }) {
   const isDead = player.status === 'dead'
+  const isDisconnected = player.isConnected === false
   const role = showRole && player.role ? roleInfo[player.role] : null
 
   return (
@@ -138,6 +139,7 @@ function PlayerCard({
       className={`
         w-full flex items-center gap-3 p-3 rounded-xl transition-all
         ${isDead ? 'opacity-50' : ''}
+        ${isDisconnected && !isDead ? 'opacity-60' : ''}
         ${isSelectable && !isDead ? 'cursor-pointer hover:bg-bg-elevated' : 'cursor-default'}
         ${isSelected ? 'ring-2 ring-accent-mafia bg-accent-mafia/10' : 'bg-bg-surface'}
         ${isMe ? 'border border-accent-neutral/30' : ''}
@@ -145,19 +147,24 @@ function PlayerCard({
       whileTap={isSelectable && !isDead ? { scale: 0.98 } : {}}
     >
       {/* Avatar */}
-      <div className="w-12 h-12 rounded-full flex items-center justify-center text-xl bg-bg-elevated">
-        {isDead ? '💀' : player.nickname.charAt(0).toUpperCase()}
+      <div className={`w-12 h-12 rounded-full flex items-center justify-center text-xl bg-bg-elevated ${isDisconnected && !isDead ? 'ring-2 ring-accent-warning ring-offset-2 ring-offset-bg-surface' : ''}`}>
+        {isDead ? '💀' : isDisconnected ? '📵' : player.nickname.charAt(0).toUpperCase()}
       </div>
 
       {/* Info */}
       <div className="flex-1 text-left">
         <div className="flex items-center gap-2">
-          <span className={`font-medium ${isDead ? 'text-text-disabled line-through' : 'text-text-primary'}`}>
+          <span className={`font-medium ${isDead ? 'text-text-disabled line-through' : isDisconnected ? 'text-text-secondary' : 'text-text-primary'}`}>
             {player.nickname}
           </span>
           {isMe && (
             <span className="text-xs px-2 py-0.5 bg-accent-neutral/20 text-accent-neutral rounded-full">
               You
+            </span>
+          )}
+          {isDisconnected && !isDead && (
+            <span className="text-xs px-2 py-0.5 bg-accent-warning/20 text-accent-warning rounded-full">
+              Disconnected
             </span>
           )}
         </div>
@@ -167,6 +174,7 @@ function PlayerCard({
           </div>
         )}
         {isDead && <span className="text-sm text-text-disabled">Eliminated</span>}
+        {isDisconnected && !isDead && <span className="text-sm text-accent-warning">Reconnecting...</span>}
       </div>
 
       {/* Vote count */}

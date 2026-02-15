@@ -33,6 +33,9 @@ func NewRouter(hub *Hub, roomService *service.RoomService, gameService *service.
 	// Set up game event handler
 	gameService.SetEventHandler(r.handleGameEvent)
 
+	// Set up reconnect timeout handler
+	roomService.SetReconnectTimeoutHandler(r.handleReconnectTimeout)
+
 	return r
 }
 
@@ -45,6 +48,8 @@ func (r *Router) HandleMessage(client *Client, msg *Message) {
 		r.handleJoinRoom(client, msg)
 	case MsgTypeLeaveRoom:
 		r.handleLeaveRoom(client)
+	case MsgTypeReconnect:
+		r.handleReconnect(client)
 	case MsgTypeReady:
 		r.handleReady(client, msg)
 	case MsgTypeUpdateSettings:
@@ -88,6 +93,21 @@ func (r *Router) HandleDisconnect(client *Client) {
 		}), nil)
 	}
 
+	// Check if player can reconnect (active game)
+	// If so, mark as disconnected instead of removing
+	if r.roomService.MarkPlayerDisconnected(client.RoomCode, client.PlayerID) {
+		// Player marked as disconnected, awaiting reconnect
+		r.hub.BroadcastToRoom(client.RoomCode, MustMessage(EventTypePlayerDisconnected, map[string]any{
+			"player_id": client.PlayerID,
+		}), nil)
+		r.logger.Info("player disconnected during game, awaiting reconnect",
+			"room", client.RoomCode,
+			"player_id", client.PlayerID,
+		)
+		return
+	}
+
+	// Not in active game or reconnect not possible - remove player
 	player, newHostID, err := r.roomService.LeaveRoom(client.RoomCode, client.PlayerID)
 	if err != nil {
 		r.logger.Warn("error removing player on disconnect",
@@ -240,6 +260,115 @@ func (r *Router) handleLeaveRoom(client *Client) {
 	)
 }
 
+func (r *Router) handleReconnect(client *Client) {
+	// Check if player can reconnect
+	dp, ok := r.roomService.CanReconnect(client.PlayerID)
+	if !ok {
+		client.SendError("reconnect_failed", "No active session to reconnect to")
+		return
+	}
+
+	// Perform reconnection
+	room, err := r.roomService.ReconnectPlayer(client.PlayerID)
+	if err != nil {
+		client.SendError("reconnect_failed", "Failed to reconnect: "+err.Error())
+		return
+	}
+
+	// Add client back to hub's room
+	r.hub.JoinRoom(client, room.Code)
+
+	// Get game state for the player
+	game := r.gameService.GetGame(room.Code)
+	if game == nil {
+		client.SendError("reconnect_failed", "Game no longer exists")
+		return
+	}
+
+	// Send room state to reconnecting player
+	r.sendRoomState(client, room)
+
+	// Send game state to reconnecting player
+	player := room.GetPlayer(client.PlayerID)
+	role := game.Roles[client.PlayerID]
+	client.Send(MustMessage(EventTypeRoleAssigned, RoleAssignedPayload{
+		Role:      string(role),
+		Team:      string(role.GetTeam()),
+		Teammates: game.GetMafiaTeammates(client.PlayerID),
+	}))
+
+	// Send current phase info
+	client.Send(MustMessage(EventTypePhaseChanged, PhaseChangedPayload{
+		Phase: string(game.Phase),
+		Timer: int(time.Until(game.PhaseEndTime).Seconds()),
+	}))
+
+	// Broadcast reconnection to other players
+	r.hub.BroadcastToRoom(room.Code, MustMessage(EventTypePlayerReconnected, map[string]any{
+		"player_id": client.PlayerID,
+		"nickname":  player.Nickname,
+	}), client)
+
+	r.logger.Info("player reconnected",
+		"room", dp.RoomCode,
+		"player_id", client.PlayerID,
+	)
+}
+
+// handleReconnectTimeout is called when a disconnected player's timer expires
+func (r *Router) handleReconnectTimeout(roomCode, playerID string) {
+	// Get the room
+	room, err := r.roomService.GetRoom(roomCode)
+	if err != nil {
+		return
+	}
+
+	// Remove the player from the room
+	player, newHostID, err := r.roomService.LeaveRoom(roomCode, playerID)
+	if err != nil {
+		r.logger.Warn("error removing timed-out player",
+			"error", err,
+			"player_id", playerID,
+			"room", roomCode,
+		)
+		return
+	}
+
+	// Broadcast player left
+	r.hub.BroadcastToRoom(roomCode, MustMessage(EventTypePlayerLeft, PlayerLeftPayload{
+		PlayerID: player.ID,
+		NewHost:  newHostID,
+	}), nil)
+
+	// Check if game should end due to player leaving
+	game := r.gameService.GetGame(roomCode)
+	if game != nil {
+		gameOver, winner := game.CheckWinCondition()
+		if gameOver {
+			game.EndGame(winner)
+			r.hub.BroadcastToRoom(roomCode, MustMessage(EventTypeGameOver, GameOverPayload{
+				Winner:  string(winner),
+				Players: toPlayerDTOs(room.GetPlayersDTO()),
+				Roles:   getRoleStrings(game.Roles),
+			}), nil)
+		}
+	}
+
+	r.logger.Info("disconnected player removed after timeout",
+		"room", roomCode,
+		"player_id", playerID,
+	)
+}
+
+// getRoleStrings converts role map to string map
+func getRoleStrings(roles map[string]entity.Role) map[string]string {
+	result := make(map[string]string)
+	for id, role := range roles {
+		result[id] = string(role)
+	}
+	return result
+}
+
 func (r *Router) handleReady(client *Client, msg *Message) {
 	if client.RoomCode == "" {
 		client.SendError("not_in_room", "Not in a room")
@@ -320,11 +449,12 @@ func toPlayerDTOs(dtos []entity.PlayerDTO) []PlayerDTO {
 
 func toPlayerDTO(dto entity.PlayerDTO) PlayerDTO {
 	return PlayerDTO{
-		ID:       dto.ID,
-		Nickname: dto.Nickname,
-		IsHost:   dto.IsHost,
-		IsReady:  dto.IsReady,
-		Status:   dto.Status,
+		ID:          dto.ID,
+		Nickname:    dto.Nickname,
+		IsHost:      dto.IsHost,
+		IsReady:     dto.IsReady,
+		IsConnected: dto.IsConnected,
+		Status:      dto.Status,
 	}
 }
 

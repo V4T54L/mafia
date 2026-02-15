@@ -5,24 +5,48 @@ import (
 	"encoding/hex"
 	"log/slog"
 	"sync"
+	"time"
 
 	"github.com/V4T54L/mafia/internal/domain/entity"
 	"github.com/V4T54L/mafia/internal/pkg/id"
 )
 
+const (
+	// ReconnectTimeout is how long a player has to reconnect after disconnecting
+	ReconnectTimeout = 60 * time.Second
+)
+
+// DisconnectedPlayer tracks a disconnected player awaiting reconnection
+type DisconnectedPlayer struct {
+	PlayerID  string
+	RoomCode  string
+	Timer     *time.Timer
+	ExpiresAt time.Time
+}
+
 // RoomService manages game rooms
 type RoomService struct {
-	rooms  map[string]*entity.Room // keyed by room code
-	mu     sync.RWMutex
-	logger *slog.Logger
+	rooms        map[string]*entity.Room           // keyed by room code
+	disconnected map[string]*DisconnectedPlayer    // keyed by player ID
+	mu           sync.RWMutex
+	logger       *slog.Logger
+
+	// Callback when a disconnected player times out
+	onReconnectTimeout func(roomCode, playerID string)
 }
 
 // NewRoomService creates a new room service
 func NewRoomService(logger *slog.Logger) *RoomService {
 	return &RoomService{
-		rooms:  make(map[string]*entity.Room),
-		logger: logger,
+		rooms:        make(map[string]*entity.Room),
+		disconnected: make(map[string]*DisconnectedPlayer),
+		logger:       logger,
 	}
+}
+
+// SetReconnectTimeoutHandler sets the callback for when a disconnected player times out
+func (s *RoomService) SetReconnectTimeoutHandler(handler func(roomCode, playerID string)) {
+	s.onReconnectTimeout = handler
 }
 
 // CreateRoom creates a new room and returns the room code
@@ -167,6 +191,138 @@ func (s *RoomService) RoomCount() int {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return len(s.rooms)
+}
+
+// MarkPlayerDisconnected marks a player as disconnected and starts the reconnection timer
+// Returns true if the player was marked as disconnected (game in progress)
+// Returns false if the player should be removed immediately (lobby phase)
+func (s *RoomService) MarkPlayerDisconnected(code, playerID string) bool {
+	room, err := s.GetRoom(code)
+	if err != nil {
+		return false
+	}
+
+	player := room.GetPlayer(playerID)
+	if player == nil {
+		return false
+	}
+
+	// Only allow reconnection during active games
+	if room.State != entity.RoomStatePlaying {
+		return false
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	// Mark player as disconnected
+	player.IsConnected = false
+
+	// Start reconnection timer
+	timer := time.AfterFunc(ReconnectTimeout, func() {
+		s.handleReconnectTimeout(code, playerID)
+	})
+
+	s.disconnected[playerID] = &DisconnectedPlayer{
+		PlayerID:  playerID,
+		RoomCode:  code,
+		Timer:     timer,
+		ExpiresAt: time.Now().Add(ReconnectTimeout),
+	}
+
+	s.logger.Info("player disconnected, awaiting reconnect",
+		"room", code,
+		"player_id", playerID,
+		"timeout", ReconnectTimeout,
+	)
+
+	return true
+}
+
+// handleReconnectTimeout handles when a disconnected player's timer expires
+func (s *RoomService) handleReconnectTimeout(code, playerID string) {
+	s.mu.Lock()
+	dp, ok := s.disconnected[playerID]
+	if !ok {
+		s.mu.Unlock()
+		return
+	}
+	delete(s.disconnected, playerID)
+	s.mu.Unlock()
+
+	s.logger.Info("reconnection timeout expired",
+		"room", code,
+		"player_id", playerID,
+	)
+
+	// Call the timeout handler if set
+	if s.onReconnectTimeout != nil {
+		s.onReconnectTimeout(dp.RoomCode, dp.PlayerID)
+	}
+}
+
+// CanReconnect checks if a player can reconnect to a room
+func (s *RoomService) CanReconnect(playerID string) (*DisconnectedPlayer, bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	dp, ok := s.disconnected[playerID]
+	if !ok {
+		return nil, false
+	}
+
+	// Check if not expired
+	if time.Now().After(dp.ExpiresAt) {
+		return nil, false
+	}
+
+	return dp, true
+}
+
+// ReconnectPlayer restores a disconnected player's connection
+func (s *RoomService) ReconnectPlayer(playerID string) (*entity.Room, error) {
+	s.mu.Lock()
+	dp, ok := s.disconnected[playerID]
+	if !ok {
+		s.mu.Unlock()
+		return nil, entity.ErrPlayerNotFound
+	}
+
+	// Stop the timer
+	dp.Timer.Stop()
+	delete(s.disconnected, playerID)
+	s.mu.Unlock()
+
+	// Get the room
+	room, err := s.GetRoom(dp.RoomCode)
+	if err != nil {
+		return nil, err
+	}
+
+	// Mark player as connected
+	player := room.GetPlayer(playerID)
+	if player == nil {
+		return nil, entity.ErrPlayerNotFound
+	}
+	player.IsConnected = true
+
+	s.logger.Info("player reconnected",
+		"room", dp.RoomCode,
+		"player_id", playerID,
+	)
+
+	return room, nil
+}
+
+// CancelReconnectTimer cancels a pending reconnection timer (e.g., when player is removed)
+func (s *RoomService) CancelReconnectTimer(playerID string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if dp, ok := s.disconnected[playerID]; ok {
+		dp.Timer.Stop()
+		delete(s.disconnected, playerID)
+	}
 }
 
 // hashPassword creates a simple hash of the password
