@@ -28,7 +28,7 @@ var (
 )
 
 const (
-	MinPlayers = 6
+	MinPlayers = 3
 	MaxPlayers = 12
 )
 

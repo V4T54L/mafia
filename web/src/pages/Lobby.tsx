@@ -130,12 +130,12 @@ function SettingsPanel({
       <div className="mt-4 pt-4 border-t border-bg-elevated">
         <div className="flex justify-between text-sm">
           <span className="text-text-secondary">Total players needed</span>
-          <span className={`font-medium ${totalPlayers >= 6 && totalPlayers <= 12 ? 'text-accent-success' : 'text-accent-mafia'}`}>
+          <span className={`font-medium ${totalPlayers >= 3 && totalPlayers <= 12 ? 'text-accent-success' : 'text-accent-mafia'}`}>
             {totalPlayers}
           </span>
         </div>
-        {(totalPlayers < 6 || totalPlayers > 12) && (
-          <p className="text-xs text-accent-mafia mt-1">Must be between 6-12 players</p>
+        {(totalPlayers < 3 || totalPlayers > 12) && (
+          <p className="text-xs text-accent-mafia mt-1">Must be between 3-12 players</p>
         )}
       </div>
     </div>
@@ -181,7 +181,8 @@ export function Lobby() {
   const copyRoomCode = async () => {
     const roomCodeToCopy = roomCode || code
     if (roomCodeToCopy) {
-      await navigator.clipboard.writeText(roomCodeToCopy)
+      const shareUrl = `${window.location.origin}/join/${roomCodeToCopy}`
+      await navigator.clipboard.writeText(shareUrl)
       setCopied(true)
       setTimeout(() => setCopied(false), 2000)
     }
@@ -231,7 +232,7 @@ export function Lobby() {
           className="flex items-center gap-2 px-3 py-1.5 bg-bg-surface rounded-lg hover:bg-bg-elevated transition-colors"
         >
           <span className="font-mono text-lg text-text-primary">{displayCode}</span>
-          <span className="text-xs text-text-secondary">{copied ? 'Copied!' : 'Copy'}</span>
+          <span className="text-xs text-text-secondary">{copied ? 'Copied!' : 'Share'}</span>
         </button>
 
         <div className="text-xs text-text-disabled">
@@ -267,7 +268,7 @@ export function Lobby() {
             ))}
 
             {/* Empty slots */}
-            {Array.from({ length: Math.max(0, 6 - players.length) }).map((_, i) => (
+            {Array.from({ length: Math.max(0, 3 - players.length) }).map((_, i) => (
               <div
                 key={`empty-${i}`}
                 className="flex items-center gap-3 p-3 rounded-xl border border-dashed border-bg-surface"
