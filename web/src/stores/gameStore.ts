@@ -162,7 +162,10 @@ export const useGameStore = create<GameState>((set, get) => ({
 
   // Actions
   setRoomCode: (code) => set({ roomCode: code }),
-  setPlayerId: (id) => set({ playerId: id }),
+  setPlayerId: (id) => {
+    console.log('[Store] setPlayerId called with:', id)
+    set({ playerId: id })
+  },
   setConnected: (connected) => set({ isConnected: connected }),
   setPlayers: (players) => set({ players }),
   setSettings: (settings) => set({ settings }),
@@ -229,7 +232,9 @@ export const useGameStore = create<GameState>((set, get) => ({
       ),
     })
   },
-  reset: () =>
+  reset: () => {
+    console.log('[Store] reset() called - clearing playerId')
+    console.trace('[Store] reset() call stack')
     set({
       roomCode: null,
       playerId: null,
@@ -252,5 +257,6 @@ export const useGameStore = create<GameState>((set, get) => ({
       dayResult: null,
       winner: null,
       ghostMessages: [],
-    }),
+    })
+  },
 }))

@@ -660,6 +660,9 @@ export function Game() {
   }
 
   if (!myRole || !playerId) {
+    const storeState = useGameStore.getState()
+    console.log('[Game] Loading state - myRole:', myRole, 'playerId:', playerId, 'phase:', phase)
+    console.log('[Game] Full store state:', { playerId: storeState.playerId, myRole: storeState.myRole, phase: storeState.phase })
     return (
       <div className="min-h-screen flex items-center justify-center bg-bg-primary">
         <p className="text-text-secondary">Loading game...</p>

@@ -53,16 +53,20 @@ func (h *Hub) Run() {
 	for {
 		select {
 		case client := <-h.register:
+			h.mu.Lock()
 			h.clients[client] = true
+			h.mu.Unlock()
 			h.logger.Debug("client registered", "player_id", client.PlayerID)
 
 		case client := <-h.unregister:
+			h.mu.Lock()
 			if _, ok := h.clients[client]; ok {
-				h.removeClientFromRoom(client)
+				h.leaveRoomLocked(client)
 				delete(h.clients, client)
 				close(client.send)
 				h.logger.Debug("client unregistered", "player_id", client.PlayerID)
 			}
+			h.mu.Unlock()
 
 		case roomMsg := <-h.broadcast:
 			h.broadcastToRoom(roomMsg)
@@ -212,7 +216,9 @@ func (h *Hub) GetClient(playerID string) *Client {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 
+	h.logger.Debug("looking for client", "target_player_id", playerID, "total_clients", len(h.clients))
 	for client := range h.clients {
+		h.logger.Debug("checking client", "client_player_id", client.PlayerID)
 		if client.PlayerID == playerID {
 			return client
 		}

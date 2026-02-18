@@ -154,6 +154,7 @@ export function Lobby() {
     isHost,
     roomCode,
     phase,
+    myRole,
     reset,
   } = useGameStore()
 
@@ -166,12 +167,13 @@ export function Lobby() {
     }
   }, [isConnected, roomCode, code, navigate])
 
-  // Navigate to game when game starts
+  // Navigate to game when game starts AND role is assigned AND we have playerId
   useEffect(() => {
-    if (phase === 'role_reveal') {
+    if (phase === 'role_reveal' && myRole && playerId) {
+      console.log('[Lobby] Navigating to game - phase:', phase, 'myRole:', myRole, 'playerId:', playerId)
       navigate(`/game/${roomCode || code}`)
     }
-  }, [phase, roomCode, code, navigate])
+  }, [phase, myRole, playerId, roomCode, code, navigate])
 
   const me = players.find((p) => p.id === playerId)
   const isReady = me?.isReady || false

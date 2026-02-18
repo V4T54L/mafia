@@ -103,9 +103,10 @@ func (r *Room) AddPlayer(player *Player) error {
 		}
 	}
 
-	// First player becomes host
+	// First player becomes host and is ready by default
 	if len(r.Players) == 0 {
 		player.IsHost = true
+		player.IsReady = true
 	}
 
 	r.Players[player.ID] = player

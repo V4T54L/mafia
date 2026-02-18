@@ -797,9 +797,16 @@ func (r *Router) handleGameEvent(event service.GameEvent) {
 
 	case service.EventRoleAssigned:
 		// Send to specific player
+		r.logger.Info("sending role assignment",
+			"target_player_id", event.TargetPlayerID,
+			"room", event.RoomCode,
+		)
 		client := r.hub.GetClient(event.TargetPlayerID)
 		if client != nil {
+			r.logger.Info("found client for role assignment", "player_id", event.TargetPlayerID)
 			client.Send(MustMessage(EventTypeRoleAssigned, event.Data))
+		} else {
+			r.logger.Error("client not found for role assignment", "player_id", event.TargetPlayerID)
 		}
 
 	case service.EventPhaseChanged:

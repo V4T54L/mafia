@@ -44,17 +44,19 @@ type GameService struct {
 	mu           sync.RWMutex
 
 	// Timer management
-	phaseTimers map[string]*time.Timer
-	timerMu     sync.Mutex
+	phaseTimers   map[string]*time.Timer
+	timerCancels  map[string]chan struct{} // cancel channels for ticker goroutines
+	timerMu       sync.Mutex
 }
 
 // NewGameService creates a new game service
 func NewGameService(roomService *RoomService, logger *slog.Logger) *GameService {
 	return &GameService{
-		games:       make(map[string]*entity.Game),
-		roomService: roomService,
-		logger:      logger,
-		phaseTimers: make(map[string]*time.Timer),
+		games:        make(map[string]*entity.Game),
+		roomService:  roomService,
+		logger:       logger,
+		phaseTimers:  make(map[string]*time.Timer),
+		timerCancels: make(map[string]chan struct{}),
 	}
 }
 
@@ -274,8 +276,8 @@ func (s *GameService) transitionToDay(roomCode string) {
 		},
 	})
 
-	// Start day timer
-	s.startPhaseTimer(roomCode, duration, func() {
+	// Start day timer (no ticker - voting doesn't need countdown display)
+	s.startDayTimer(roomCode, duration, func() {
 		s.resolveDay(roomCode)
 	})
 }
@@ -424,10 +426,17 @@ func (s *GameService) startPhaseTimer(roomCode string, duration time.Duration, o
 	s.timerMu.Lock()
 	defer s.timerMu.Unlock()
 
-	// Cancel existing timer
+	// Cancel existing timer and ticker goroutine
 	if timer, ok := s.phaseTimers[roomCode]; ok {
 		timer.Stop()
 	}
+	if cancel, ok := s.timerCancels[roomCode]; ok {
+		close(cancel)
+	}
+
+	// Create new cancel channel for this ticker
+	cancel := make(chan struct{})
+	s.timerCancels[roomCode] = cancel
 
 	// Start countdown timer that ticks every second
 	endTime := time.Now().Add(duration)
@@ -435,24 +444,30 @@ func (s *GameService) startPhaseTimer(roomCode string, duration time.Duration, o
 
 	go func() {
 		defer ticker.Stop()
-		for range ticker.C {
-			remaining := int(time.Until(endTime).Seconds())
-			if remaining <= 0 {
-				s.timerMu.Lock()
-				delete(s.phaseTimers, roomCode)
-				s.timerMu.Unlock()
-				onExpire()
+		for {
+			select {
+			case <-cancel:
 				return
-			}
+			case <-ticker.C:
+				remaining := int(time.Until(endTime).Seconds())
+				if remaining <= 0 {
+					s.timerMu.Lock()
+					delete(s.phaseTimers, roomCode)
+					delete(s.timerCancels, roomCode)
+					s.timerMu.Unlock()
+					onExpire()
+					return
+				}
 
-			// Emit timer tick
-			s.emitEvent(GameEvent{
-				Type:     EventTimerTick,
-				RoomCode: roomCode,
-				Data: map[string]any{
-					"remaining": remaining,
-				},
-			})
+				// Emit timer tick
+				s.emitEvent(GameEvent{
+					Type:     EventTimerTick,
+					RoomCode: roomCode,
+					Data: map[string]any{
+						"remaining": remaining,
+					},
+				})
+			}
 		}
 	}()
 
@@ -468,6 +483,31 @@ func (s *GameService) cancelPhaseTimer(roomCode string) {
 		timer.Stop()
 		delete(s.phaseTimers, roomCode)
 	}
+
+	// Close cancel channel to stop any running ticker goroutine
+	if cancel, ok := s.timerCancels[roomCode]; ok {
+		close(cancel)
+		delete(s.timerCancels, roomCode)
+	}
+}
+
+// startDayTimer creates a simple timeout for day phase (no ticker)
+// Day phase doesn't need countdown display - just waits for votes or timeout
+func (s *GameService) startDayTimer(roomCode string, duration time.Duration, onExpire func()) {
+	s.timerMu.Lock()
+	defer s.timerMu.Unlock()
+
+	// Cancel existing timer and ticker goroutine
+	if timer, ok := s.phaseTimers[roomCode]; ok {
+		timer.Stop()
+	}
+	if cancel, ok := s.timerCancels[roomCode]; ok {
+		close(cancel)
+		delete(s.timerCancels, roomCode)
+	}
+
+	// Simple timeout - no ticker, no timer_tick events
+	s.phaseTimers[roomCode] = time.AfterFunc(duration, onExpire)
 }
 
 // GetGameState returns the current game state for a player

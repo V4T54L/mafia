@@ -119,8 +119,10 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
       switch (message.type) {
         case 'connected': {
           const { player_id } = message.payload as { player_id: string }
+          console.log('[WS] Setting playerId:', player_id)
           setPlayerId(player_id)
           setConnected(true)
+          console.log('[WS] playerId set, store value:', useGameStore.getState().playerId)
           break
         }
 
@@ -317,6 +319,7 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
             team: string
             teammates?: Array<{ id: string; nickname: string; role: string }>
           }
+          console.log('[WS] Processing role_assigned:', { role, team, teammates })
           setMyRole(
             role as 'villager' | 'mafia' | 'godfather' | 'doctor' | 'detective',
             team as 'town' | 'mafia',
@@ -326,6 +329,10 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
               role: t.role as 'villager' | 'mafia' | 'godfather' | 'doctor' | 'detective',
             }))
           )
+          console.log('[WS] myRole set, now setting phase to role_reveal')
+          // Set phase to role_reveal to trigger navigation from Lobby to Game
+          setPhase('role_reveal')
+          console.log('[WS] phase set to role_reveal')
           break
         }
 
@@ -335,7 +342,7 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
             round: number
             timer?: number
           }
-          setPhase(phase as 'night' | 'day')
+          setPhase(phase as 'lobby' | 'role_reveal' | 'night' | 'night_result' | 'day' | 'day_result' | 'game_over')
           setRound(round)
           if (timer !== undefined) {
             setPhaseTimer(timer)
