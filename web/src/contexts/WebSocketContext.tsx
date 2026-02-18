@@ -54,6 +54,7 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
     setRound,
     setMyRole,
     setPhaseTimer,
+    setMafiaVotes,
     setVoteDetails,
     setNightResult,
     setDayResult,
@@ -393,6 +394,18 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
           break
         }
 
+        case 'mafia_vote': {
+          const { votes } = message.payload as {
+            voter_id: string
+            voter_nickname: string
+            target_id: string
+            target_nickname: string
+            votes: Record<string, string>
+          }
+          setMafiaVotes(votes)
+          break
+        }
+
         case 'vote_update': {
           const { votes, submitted } = message.payload as {
             votes: Record<string, string>
@@ -499,7 +512,7 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
     } catch (err) {
       console.error('[WS] Failed to handle message:', err)
     }
-  }, [setPlayerId, setConnected, setRoomCode, setIsHost, setPlayers, setSettings, addPlayer, removePlayer, updatePlayerReady, updatePlayerStatus, updatePlayerSpeaking, updatePlayerConnected, setPhase, setRound, setMyRole, setPhaseTimer, setVoteDetails, setNightResult, setDayResult, setWinner, addGhostMessage])
+  }, [setPlayerId, setConnected, setRoomCode, setIsHost, setPlayers, setSettings, addPlayer, removePlayer, updatePlayerReady, updatePlayerStatus, updatePlayerSpeaking, updatePlayerConnected, setPhase, setRound, setMyRole, setPhaseTimer, setMafiaVotes, setVoteDetails, setNightResult, setDayResult, setWinner, addGhostMessage])
 
   // Handle incoming messages (may be batched with newlines)
   const handleMessage = useCallback((event: MessageEvent) => {

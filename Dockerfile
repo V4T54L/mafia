@@ -57,9 +57,13 @@ USER appuser
 ENV PORT=8080 \
     HOST=0.0.0.0 \
     STATIC_DIR=/app/static \
-    ENV=production
+    ENV=production \
+    SFU_UDP_PORT_MIN=5000 \
+    SFU_UDP_PORT_MAX=5100 \
+    SFU_STUN_SERVER=stun:stun.l.google.com:19302
 
 EXPOSE 8080
+EXPOSE 5000-5100/udp
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \

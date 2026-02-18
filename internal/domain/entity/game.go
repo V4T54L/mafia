@@ -90,6 +90,9 @@ type Game struct {
 	LastDayResult   *DayResult
 	Winner          Team
 
+	// Godfather immunity - becomes false after first investigation
+	GodfatherImmunityUsed bool
+
 	mu sync.RWMutex
 }
 
@@ -310,8 +313,21 @@ func (g *Game) ResolveNight() *NightResult {
 		targetID := g.NightActions.DetectiveTarget
 		if target := g.Room.GetPlayer(targetID); target != nil {
 			targetRole := g.Roles[targetID]
-			// Godfather appears as town
-			isMafia := targetRole == RoleMafia
+			var isMafia bool
+			if targetRole == RoleGodfather {
+				// Godfather has one-time immunity
+				if g.GodfatherImmunityUsed {
+					// Immunity already used, appears as mafia
+					isMafia = true
+				} else {
+					// First investigation, use immunity, appears as town
+					isMafia = false
+					g.GodfatherImmunityUsed = true
+				}
+			} else {
+				// Regular mafia check
+				isMafia = targetRole == RoleMafia
+			}
 			result.DetectiveResult = &DetectiveResult{
 				TargetID:       targetID,
 				TargetNickname: target.Nickname,
@@ -624,4 +640,25 @@ func (g *Game) GetRoleRevealData(playerID string) map[string]any {
 	}
 
 	return data
+}
+
+// GetPlayerRole returns a player's role
+func (g *Game) GetPlayerRole(playerID string) Role {
+	g.mu.RLock()
+	defer g.mu.RUnlock()
+	return g.Roles[playerID]
+}
+
+// GetMafiaVotes returns a copy of the current mafia votes
+func (g *Game) GetMafiaVotes() map[string]string {
+	g.mu.RLock()
+	defer g.mu.RUnlock()
+	if g.NightActions == nil {
+		return nil
+	}
+	votes := make(map[string]string)
+	for k, v := range g.NightActions.MafiaVotes {
+		votes[k] = v
+	}
+	return votes
 }

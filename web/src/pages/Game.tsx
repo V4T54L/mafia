@@ -7,7 +7,7 @@ import { GhostChat } from '../components/GhostChat'
 import { VoteDetailModal } from '../components/VoteDetailModal'
 import { useGameStore } from '../stores/gameStore'
 import { useWebSocket } from '../contexts/WebSocketContext'
-import type { Role, Player, Team } from '../stores/gameStore'
+import type { Role, Player, Team, Teammate } from '../stores/gameStore'
 
 // Role display info
 const roleInfo: Record<Role, { icon: string; name: string; team: Team; description: string }> = {
@@ -208,12 +208,16 @@ function NightPhase({
   myRole,
   myId,
   players,
+  teammates,
+  mafiaVotes,
   timer,
   onAction,
 }: {
   myRole: Role
   myId: string
   players: Player[]
+  teammates: Teammate[]
+  mafiaVotes: Record<string, string>
   timer: number | null
   onAction: (targetId: string) => void
 }) {
@@ -255,6 +259,22 @@ function NightPhase({
     }
   }
 
+  // Get who voted for a specific target (for mafia)
+  const getMafiaVotersFor = (targetId: string): string[] => {
+    const voters: string[] = []
+    for (const [voterId, target] of Object.entries(mafiaVotes)) {
+      if (target === targetId) {
+        const voter = teammates.find((t) => t.id === voterId)
+        if (voter) {
+          voters.push(voter.nickname)
+        } else if (voterId === myId) {
+          voters.push('You')
+        }
+      }
+    }
+    return voters
+  }
+
   return (
     <div className="flex-1 p-4 pb-32">
       <div className="max-w-md mx-auto">
@@ -272,19 +292,55 @@ function NightPhase({
           </div>
         )}
 
+        {/* Mafia teammate votes */}
+        {isMafia && Object.keys(mafiaVotes).length > 0 && (
+          <div className="bg-accent-mafia/10 border border-accent-mafia/20 rounded-xl p-3 mb-4">
+            <p className="text-sm text-accent-mafia font-medium mb-2">Team Votes:</p>
+            <div className="space-y-1">
+              {teammates.map((teammate) => {
+                const targetId = mafiaVotes[teammate.id]
+                const target = targetId ? players.find((p) => p.id === targetId) : null
+                return (
+                  <div key={teammate.id} className="text-sm text-text-secondary flex items-center gap-2">
+                    <span className="text-accent-mafia">{teammate.nickname}</span>
+                    <span>→</span>
+                    <span>{target ? target.nickname : '...'}</span>
+                  </div>
+                )
+              })}
+              {mafiaVotes[myId] && (
+                <div className="text-sm text-text-secondary flex items-center gap-2">
+                  <span className="text-accent-mafia">You</span>
+                  <span>→</span>
+                  <span>{players.find((p) => p.id === mafiaVotes[myId])?.nickname || '...'}</span>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* Player selection */}
         {canAct && !hasSubmitted && (
           <div className="space-y-2">
-            {alivePlayers.map((player) => (
-              <PlayerCard
-                key={player.id}
-                player={player}
-                isMe={player.id === myId}
-                isSelectable={canTarget(player.id)}
-                isSelected={selectedTarget === player.id}
-                onSelect={() => setSelectedTarget(player.id)}
-              />
-            ))}
+            {alivePlayers.map((player) => {
+              const mafiaVoters = isMafia ? getMafiaVotersFor(player.id) : []
+              return (
+                <div key={player.id} className="relative">
+                  <PlayerCard
+                    player={player}
+                    isMe={player.id === myId}
+                    isSelectable={canTarget(player.id)}
+                    isSelected={selectedTarget === player.id}
+                    onSelect={() => setSelectedTarget(player.id)}
+                  />
+                  {mafiaVoters.length > 0 && (
+                    <div className="absolute top-2 right-2 bg-accent-mafia/20 px-2 py-0.5 rounded text-xs text-accent-mafia">
+                      {mafiaVoters.join(', ')}
+                    </div>
+                  )}
+                </div>
+              )
+            })}
           </div>
         )}
 
@@ -621,6 +677,7 @@ export function Game() {
     teammates,
     players,
     phaseTimer,
+    mafiaVotes,
     voteCounts,
     voteMap,
     submittedVoters,
@@ -698,6 +755,8 @@ export function Game() {
           myRole={myRole}
           myId={playerId}
           players={players}
+          teammates={teammates}
+          mafiaVotes={mafiaVotes}
           timer={phaseTimer}
           onAction={handleNightAction}
         />
@@ -715,7 +774,7 @@ export function Game() {
         <DayPhase
           myId={playerId}
           players={players}
-          timer={phaseTimer}
+          timer={null}
           voteCounts={voteCounts}
           voteMap={voteMap}
           submittedVoters={submittedVoters}

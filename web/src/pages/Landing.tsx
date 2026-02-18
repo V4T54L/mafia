@@ -3,9 +3,10 @@ import { useNavigate } from 'react-router-dom'
 import { Button } from '../components/ui'
 import { HeroSection } from '../components/landing/HeroSection'
 import { HowItWorksSection } from '../components/landing/HowItWorksSection'
-import { RolesSection } from '../components/landing/RolesSection'
+import { RolesSection as RolesShowcase } from '../components/landing/RolesSection'
 import { GameLoopSection } from '../components/landing/GameLoopSection'
 import { WhyMafiaSection } from '../components/landing/WhyMafiaSection'
+import { RulesSection } from '../components/landing/RulesSection'
 import { Footer } from '../components/landing/Footer'
 
 export function Landing() {
@@ -15,8 +16,9 @@ export function Landing() {
     <div className="flex flex-col min-h-screen">
       <HeroSection />
       <HowItWorksSection />
-      <RolesSection />
+      <RolesShowcase />
       <GameLoopSection />
+      <RulesSection />
       <WhyMafiaSection />
 
       {/* Final CTA */}

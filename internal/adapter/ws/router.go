@@ -832,6 +832,13 @@ func (r *Router) handleGameEvent(event service.GameEvent) {
 	case service.EventVoteUpdate:
 		r.hub.BroadcastToRoom(event.RoomCode, MustMessage("vote_update", event.Data), nil)
 
+	case service.EventMafiaVote:
+		// Send mafia vote update to specific mafia teammate
+		client := r.hub.GetClient(event.TargetPlayerID)
+		if client != nil {
+			client.Send(MustMessage("mafia_vote", event.Data))
+		}
+
 	case service.EventDayResult:
 		r.hub.BroadcastToRoom(event.RoomCode, MustMessage(EventTypeDayResult, event.Data), nil)
 

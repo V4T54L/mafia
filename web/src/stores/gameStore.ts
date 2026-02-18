@@ -78,6 +78,7 @@ export interface GameState {
   phaseTimer: number | null
   nightTarget: string | null
   dayVote: string | null
+  mafiaVotes: Record<string, string>   // mafia voter ID -> target ID (for mafia UI)
   voteMap: Record<string, string>      // voter ID -> target ID
   submittedVoters: string[]            // voter IDs who have finalized
   voteCounts: Record<string, number>   // computed from voteMap
@@ -106,6 +107,7 @@ export interface GameState {
   setPhaseTimer: (timer: number | null) => void
   setNightTarget: (targetId: string | null) => void
   setDayVote: (targetId: string | null) => void
+  setMafiaVotes: (votes: Record<string, string>) => void
   setVoteDetails: (votes: Record<string, string>, submitted: string[]) => void
   setVoteCounts: (counts: Record<string, number>) => void
   setNightResult: (result: NightResult | null) => void
@@ -152,6 +154,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   phaseTimer: null,
   nightTarget: null,
   dayVote: null,
+  mafiaVotes: {},
   voteMap: {},
   submittedVoters: [],
   voteCounts: {},
@@ -199,12 +202,13 @@ export const useGameStore = create<GameState>((set, get) => ({
     set((state) => ({
       players: state.players.map((p) => (p.id === playerId ? { ...p, isConnected: connected } : p)),
     })),
-  setPhase: (phase) => set({ phase, nightTarget: null, dayVote: null, voteMap: {}, submittedVoters: [], voteCounts: {} }),
+  setPhase: (phase) => set({ phase, nightTarget: null, dayVote: null, mafiaVotes: {}, voteMap: {}, submittedVoters: [], voteCounts: {} }),
   setRound: (round) => set({ round }),
   setMyRole: (role, team, teammates) => set({ myRole: role, myTeam: team, teammates: teammates || [] }),
   setPhaseTimer: (timer) => set({ phaseTimer: timer }),
   setNightTarget: (targetId) => set({ nightTarget: targetId }),
   setDayVote: (targetId) => set({ dayVote: targetId }),
+  setMafiaVotes: (votes) => set({ mafiaVotes: votes }),
   setVoteDetails: (votes, submitted) => {
     // Compute vote counts from the vote map
     const counts: Record<string, number> = {}
@@ -250,6 +254,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       phaseTimer: null,
       nightTarget: null,
       dayVote: null,
+      mafiaVotes: {},
       voteMap: {},
       submittedVoters: [],
       voteCounts: {},

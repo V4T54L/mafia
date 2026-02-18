@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"os"
 	"os/signal"
@@ -23,10 +24,15 @@ func main() {
 	// Initialize logger
 	log := logger.New(cfg.IsDev())
 
+	// Load SFU config early for logging
+	sfuConfig := sfu.DefaultConfig()
+
 	log.Info("starting server",
 		"port", cfg.Port,
 		"env", cfg.Env,
 		"staticDir", cfg.StaticDir,
+		"sfuUdpPorts", fmt.Sprintf("%d-%d", sfuConfig.UDPPortMin, sfuConfig.UDPPortMax),
+		"sfuStunServer", sfuConfig.STUNServer,
 	)
 
 	// Create services
@@ -34,7 +40,6 @@ func main() {
 	gameService := service.NewGameService(roomService, log)
 
 	// Create SFU for voice chat
-	sfuConfig := sfu.DefaultConfig()
 	sfuInstance, err := sfu.New(sfuConfig, log)
 	if err != nil {
 		log.Error("failed to create SFU", "error", err)

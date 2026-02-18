@@ -19,6 +19,7 @@ const (
 	EventNightResult    GameEventType = "night_result"
 	EventDayResult      GameEventType = "day_result"
 	EventVoteUpdate     GameEventType = "vote_update"
+	EventMafiaVote      GameEventType = "mafia_vote"
 	EventGameOver       GameEventType = "game_over"
 	EventVoiceRouting   GameEventType = "voice_routing"
 )
@@ -171,6 +172,9 @@ func (s *GameService) SubmitNightAction(roomCode, playerID, targetID string) err
 		return entity.ErrGameNotStarted
 	}
 
+	// Get player role before submitting (to check if mafia)
+	role := game.GetPlayerRole(playerID)
+
 	err := game.SubmitNightAction(playerID, targetID)
 	if err != nil {
 		return err
@@ -181,6 +185,38 @@ func (s *GameService) SubmitNightAction(roomCode, playerID, targetID string) err
 		"player", playerID,
 		"target", targetID,
 	)
+
+	// If mafia voted, notify other mafia teammates
+	if role == entity.RoleMafia || role == entity.RoleGodfather {
+		// Get target nickname
+		targetNickname := ""
+		if player := game.Room.GetPlayer(targetID); player != nil {
+			targetNickname = player.Nickname
+		}
+		// Get voter nickname
+		voterNickname := ""
+		if player := game.Room.GetPlayer(playerID); player != nil {
+			voterNickname = player.Nickname
+		}
+
+		// Notify all mafia teammates (including the voter, for confirmation)
+		mafiaTeammates := game.GetMafiaTeammates(playerID)
+		mafiaTeammates = append(mafiaTeammates, playerID) // include self
+		for _, teammateID := range mafiaTeammates {
+			s.emitEvent(GameEvent{
+				Type:           EventMafiaVote,
+				RoomCode:       roomCode,
+				TargetPlayerID: teammateID,
+				Data: map[string]any{
+					"voter_id":        playerID,
+					"voter_nickname":  voterNickname,
+					"target_id":       targetID,
+					"target_nickname": targetNickname,
+					"votes":           game.GetMafiaVotes(),
+				},
+			})
+		}
+	}
 
 	// Check if all actions are complete
 	if game.AllNightActionsComplete() {
