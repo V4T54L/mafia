@@ -4,7 +4,7 @@
 
 # Variables
 DOCKER_IMAGE := ditto512/someone-is-lying
-VERSION := v1.1.0
+VERSION ?= v1.2.0
 
 # Development
 dev: ## Run backend and frontend in development mode
